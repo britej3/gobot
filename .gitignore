@@ -1,0 +1,80 @@
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Compiled files
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Go specific
+*.out
+*.prof
+*.test
+vendor/
+
+# Backup files
+*~
+*.bak
+*.backup
+*.bkp
+
+# Sensitive files
+config.json
+secrets.json
+keys.json
+private.key
+id_rsa
+id_dsa
+*.pem
+*.p12
+*.pfx
+*.p7b
+*.p7c
+*.p7r
+*.p7s
+
+# Binary files that might contain sensitive data
+trade.wal
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Embedded git repositories
+agents.md/
+
+# Runtime generated files
+*_report_*.json
+*_session_*.json

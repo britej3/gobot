@@ -1,0 +1,831 @@
+{
+  "project": "GOBOT",
+  "branchName": "ralph/midcap-scalping-bot",
+  "description": "Transform GOBOT into a production-ready scalping bot using Binance Top Movers screening, dynamic positioning/leverage, trailing TP, and 1 USDT first trade rule",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Fix PositionState type error in reconciler",
+      "description": "As a developer, I need the code to compile so I can run the bot.",
+      "acceptanceCriteria": [
+        "Define or import PositionState type in internal/agent/reconciler.go",
+        "Fix lines 102 and 262 that reference undefined platform.PositionState",
+        "go build -buildvcs=false ./... passes without PositionState errors"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "P0 - Compilation blocker"
+    },
+    {
+      "id": "US-002",
+      "title": "Fix invalid order types in striker",
+      "description": "As a developer, I need valid Binance order types so trades can execute.",
+      "acceptanceCriteria": [
+        "Replace futures.OrderTypeStopMarket with valid Binance futures order type",
+        "Replace futures.OrderTypeTakeProfitMarket with valid Binance futures order type",
+        "Fix internal/striker/striker.go lines 298 and 318",
+        "go build -buildvcs=false ./... passes without order type errors"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "P0 - Compilation blocker. Check go-binance futures package for valid OrderType constants"
+    },
+    {
+      "id": "US-003",
+      "title": "Fix NewMarkPriceService API call in reconciler",
+      "description": "As a developer, I need to use existing Binance API methods.",
+      "acceptanceCriteria": [
+        "Remove or replace NewMarkPriceService call at line 291",
+        "Use alternative API method to get mark price (e.g., NewPremiumIndexService or fetch from ticker)",
+        "go build -buildvcs=false ./... passes without NewMarkPriceService errors"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "P0 - Compilation blocker"
+    },
+    {
+      "id": "US-004",
+      "title": "Fix unused imports in auditor",
+      "description": "As a developer, I need clean code without unused imports.",
+      "acceptanceCriteria": [
+        "Remove unused 'encoding/json' import from internal/auditor/auditor.go",
+        "Remove or use startTime variable at line 150",
+        "go build -buildvcs=false ./... passes without auditor warnings"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "P0 - Compilation blocker"
+    },
+    {
+      "id": "US-005",
+      "title": "Enable mainnet mode configuration",
+      "description": "As a trader, I need to switch from testnet to mainnet for real trading.",
+      "acceptanceCriteria": [
+        "Add MAINNET=true/false environment variable support",
+        "Platform uses mainnet API endpoints when MAINNET=true",
+        "Default to testnet (MAINNET=false) for safety",
+        "Log which mode is active on startup",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "P0 - Required for production trading"
+    },
+    {
+      "id": "US-006",
+      "title": "Implement TradingCosts struct and calculator",
+      "description": "As a trader, I need trading costs factored into position sizing.",
+      "acceptanceCriteria": [
+        "Create internal/costs/calculator.go",
+        "Implement TradingCosts struct with MakerFee, TakerFee, ExpectedSlippage, FundingFee, LiquidationCost",
+        "Implement CalculateTotalCosts function",
+        "Implement ShouldTrade function that checks if expected profit exceeds costs",
+        "Add unit tests in internal/costs/calculator_test.go",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Critical for high-leverage trading"
+    },
+    {
+      "id": "US-007",
+      "title": "Implement liquidity guard",
+      "description": "As a trader, I need slippage protection before executing trades.",
+      "acceptanceCriteria": [
+        "Create internal/agent/liquidity.go",
+        "Implement order book depth check (top 20 levels)",
+        "Implement spread validation (<0.15% threshold)",
+        "Implement slippage simulation (<0.1% threshold)",
+        "Return false from CheckLiquidity if thresholds exceeded",
+        "Add unit tests",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "P0 - Prevents slippage losses on mid-caps"
+    },
+    {
+      "id": "US-008",
+      "title": "Implement file permission security check",
+      "description": "As a developer, I need .env and state files secured on startup.",
+      "acceptanceCriteria": [
+        "Create internal/platform/security.go",
+        "Check .env file permissions are 0600",
+        "Check state.json file permissions are 0600",
+        "Auto-fix insecure permissions with warning log",
+        "Run security check on platform startup",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "P0 - Prevents API key leaks"
+    },
+    {
+      "id": "US-009",
+      "title": "Create central engine orchestrator",
+      "description": "As a developer, I need a central coordinator for all goroutines.",
+      "acceptanceCriteria": [
+        "Create internal/agent/engine.go",
+        "Implement Engine struct with Start/Stop lifecycle methods",
+        "Coordinate brain, scanner, striker, and reconciler components",
+        "Handle graceful shutdown with context cancellation",
+        "Implement error recovery and component restart logic",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "P0 - Required for production stability"
+    },
+    {
+      "id": "US-010",
+      "title": "Implement active trading loop",
+      "description": "As a trader, I need Watcher, Brain, and Striker connected in a loop.",
+      "acceptanceCriteria": [
+        "Watcher detects trading opportunities from WebSocket data",
+        "Brain analyzes opportunities and returns decisions",
+        "Striker executes decisions with liquidity checks",
+        "Loop runs every 100ms for scalping frequency",
+        "Loop respects context cancellation for shutdown",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "P0 - Core trading functionality"
+    },
+    {
+      "id": "US-011",
+      "title": "Implement EMA indicator (9, 21, 50)",
+      "description": "As a trader, I need EMA indicators for trend analysis.",
+      "acceptanceCriteria": [
+        "Create internal/indicators/ema.go (or add to existing indicators package)",
+        "Implement EMA calculation for configurable periods",
+        "Support 9, 21, 50 period EMAs",
+        "Add unit tests with known values",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "Phase 2 - Technical analysis"
+    },
+    {
+      "id": "US-012",
+      "title": "Implement RSI indicator (6-period for scalping)",
+      "description": "As a trader, I need fast RSI for overbought/oversold signals.",
+      "acceptanceCriteria": [
+        "Implement RSI calculation in internal/indicators/rsi.go",
+        "Support configurable period (default 6 for scalping)",
+        "Return values 0-100",
+        "Add unit tests with known values",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "Phase 2 - Technical analysis"
+    },
+    {
+      "id": "US-013",
+      "title": "Implement ATR indicator for stop loss calculation",
+      "description": "As a trader, I need ATR to set dynamic stop losses.",
+      "acceptanceCriteria": [
+        "Implement ATR calculation in internal/indicators/atr.go",
+        "Support 14-period ATR",
+        "Use true range calculation (max of high-low, abs(high-prevClose), abs(low-prevClose))",
+        "Add unit tests",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "Phase 2 - Technical analysis"
+    },
+    {
+      "id": "US-014",
+      "title": "Implement VWAP indicator",
+      "description": "As a trader, I need VWAP for volume-weighted price analysis.",
+      "acceptanceCriteria": [
+        "Implement VWAP calculation in internal/indicators/vwap.go",
+        "Reset VWAP at session start (configurable)",
+        "Calculate cumulative (price * volume) / cumulative volume",
+        "Add unit tests",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "Phase 2 - Technical analysis"
+    },
+    {
+      "id": "US-015",
+      "title": "Implement circuit breaker system",
+      "description": "As a trader, I need automatic trading halts on losses.",
+      "acceptanceCriteria": [
+        "Create internal/risk/circuit_breaker.go",
+        "Implement 10% daily loss limit",
+        "Implement 5 consecutive losses limit",
+        "Implement 10% volatility threshold halt",
+        "Implement cost threshold (2%) halt",
+        "Add 24-hour hard lock after trigger",
+        "Log all circuit breaker activations",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Phase 4 - Risk management. Critical for capital preservation"
+    },
+    {
+      "id": "US-016",
+      "title": "Implement dynamic position sizing with costs",
+      "description": "As a trader, I need position sizes adjusted for volatility, liquidity, and costs.",
+      "acceptanceCriteria": [
+        "Create CalculatePositionSize function in internal/risk/",
+        "Base size: 2% of capital risk per trade",
+        "Adjust for confidence level (Kelly Criterion influence)",
+        "Adjust for volatility (lower size for higher vol)",
+        "Adjust for liquidity (higher size for better liquidity)",
+        "Adjust for trading costs (lower size for higher costs)",
+        "Add unit tests",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "Phase 4 - Risk management"
+    },
+    {
+      "id": "US-017",
+      "title": "Implement funding rate filter",
+      "description": "As a trader, I need to avoid high funding costs.",
+      "acceptanceCriteria": [
+        "Add funding rate check before trade entry",
+        "Don't long if funding rate > +0.1%",
+        "Don't short if funding rate < -0.1%",
+        "Fetch funding rate from Binance API",
+        "Log when trades are blocked by funding filter",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Phase 4 - Cost management"
+    },
+    {
+      "id": "US-018",
+      "title": "Implement strategy router with knowledge base",
+      "description": "As a trader, I need dynamic strategy selection based on market conditions.",
+      "acceptanceCriteria": [
+        "Create internal/brain/router.go",
+        "Load knowledge base from configs/knowledge_base.json",
+        "Map market regimes to appropriate strategies",
+        "Implement RouteStrategy(marketCondition string) function",
+        "Create initial knowledge_base.json with scalping strategies",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "Phase 3 - LLM integration"
+    },
+    {
+      "id": "US-019",
+      "title": "Implement performance analyzer",
+      "description": "As a trader, I need to track performance metrics for optimization.",
+      "acceptanceCriteria": [
+        "Create internal/brain/analyzer.go",
+        "Track win rate, profit factor, max drawdown, Sharpe ratio",
+        "Track average trading costs per trade",
+        "Track slippage analysis per asset",
+        "Store analysis in performance.json",
+        "Add GetRecent(n int) function for last n trades",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": "Phase 5 - Self-improvement"
+    },
+    {
+      "id": "US-020",
+      "title": "Implement self-optimizer",
+      "description": "As a trader, I need the bot to adapt parameters based on performance.",
+      "acceptanceCriteria": [
+        "Create internal/brain/optimizer.go",
+        "Analyze last 50 trades for optimization",
+        "Increase min confidence if win rate < 45%",
+        "Decrease position size if slippage > 0.1%",
+        "Adjust indicator weights based on asset performance",
+        "Run optimization every hour",
+        "Log all parameter adjustments",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "Phase 5 - Self-improvement"
+    },
+    {
+      "id": "US-021",
+      "title": "Implement stealth execution in striker",
+      "description": "As a trader, I need stealth features to avoid HFT detection.",
+      "acceptanceCriteria": [
+        "Add nano-jitter (5-25ms normal distribution delay) to order execution",
+        "Add size obfuscation (0.01%-0.04% random noise)",
+        "Implement order slicing for large orders",
+        "Use IOC (Immediate-or-Cancel) for fills",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": "P1 - Prevents pattern detection by HFT predators"
+    },
+    {
+      "id": "US-022",
+      "title": "Implement TUI dashboard",
+      "description": "As a trader, I need real-time monitoring of positions and brain activity.",
+      "acceptanceCriteria": [
+        "Create internal/ui/dashboard.go using tview",
+        "Header: Status, API connection, latency, stealth mode",
+        "Middle: Positions table with Symbol, Size, Entry, Mark, PnL%",
+        "Bottom: Brain log with auto-scroll",
+        "Real-time updates via channels",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": "Phase 6 - Production monitoring"
+    },
+    {
+      "id": "US-023",
+      "title": "Create panic script for emergency halt",
+      "description": "As a trader, I need one-command emergency stop.",
+      "acceptanceCriteria": [
+        "Create scripts/panic.sh",
+        "Close all open positions immediately",
+        "Cancel all pending orders",
+        "Stop the bot process",
+        "Log emergency halt with timestamp",
+        "Make script executable"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "Phase 6 - Emergency controls"
+    },
+    {
+      "id": "US-024",
+      "title": "Create pre-flight audit script",
+      "description": "As a trader, I need safety checks before starting the bot.",
+      "acceptanceCriteria": [
+        "Create scripts/audit.sh",
+        "Check .env file exists and has correct permissions",
+        "Verify API keys are set",
+        "Check account balance meets minimum",
+        "Verify mainnet/testnet configuration",
+        "Output clear PASS/FAIL status",
+        "Make script executable"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "Phase 6 - Safety checks"
+    },
+    {
+      "id": "US-025",
+      "title": "Update AGENTS.md with project conventions",
+      "description": "As a developer, I need documented patterns for future iterations.",
+      "acceptanceCriteria": [
+        "Document build command (go build -buildvcs=false ./...)",
+        "Document test command",
+        "List key architectural patterns",
+        "Document environment variables",
+        "Document common gotchas discovered during implementation"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "Critical for future Ralph iterations"
+    },
+    {
+      "id": "US-026",
+      "title": "Setup SimpleMem memory system",
+      "description": "As a trader, I need long-term memory for learning from past trades.",
+      "acceptanceCriteria": [
+        "SimpleMem installed in memory/ directory",
+        "Config configured for OpenRouter API and Ollama embeddings",
+        "memory/setup.sh runs without errors",
+        "memory/.env file created with API keys",
+        "Ollama nomic-embed-text model pulled",
+        "Basic test: python trading_memory.py ask --question 'test' works"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "Memory system foundation"
+    },
+    {
+      "id": "US-027",
+      "title": "Integrate memory with brain engine",
+      "description": "As a trader, I need the brain to consult past trade memories before decisions.",
+      "acceptanceCriteria": [
+        "Brain engine queries memory for similar past trades before new trade",
+        "Memory context included in LLM prompt for decision making",
+        "Query time < 500ms (acceptable for scalping)",
+        "Fallback to no-memory mode if memory system unavailable",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "Memory integration with decision making"
+    },
+    {
+      "id": "US-028",
+      "title": "Store trade outcomes in memory",
+      "description": "As a trader, I need completed trades stored in memory for learning.",
+      "acceptanceCriteria": [
+        "After each trade close, store outcome in SimpleMem",
+        "Include: symbol, side, entry/exit, PnL, leverage, confidence, reason",
+        "Include lessons learned if trade was significant (>2% gain/loss)",
+        "Async storage to not block trading loop",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": "Memory capture for learning"
+    },
+    {
+      "id": "US-029",
+      "title": "Store market insights in memory",
+      "description": "As a trader, I need market patterns stored for future reference.",
+      "acceptanceCriteria": [
+        "Store significant market events (volatility spikes, pattern detections)",
+        "Include indicators at time of observation",
+        "Query-able by symbol and timeframe",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": "Market pattern memory"
+    },
+    {
+      "id": "US-030",
+      "title": "Memory-assisted strategy optimization",
+      "description": "As a trader, I need the optimizer to learn from memory.",
+      "acceptanceCriteria": [
+        "Optimizer queries memory for recent trade performance",
+        "Uses memory insights to adjust indicator weights",
+        "Logs when memory influences optimization decisions",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": "Self-improvement via memory"
+    },
+    {
+      "id": "US-031",
+      "title": "Implement Binance Futures Perpetual Top Movers screening",
+      "description": "As a trader, I need to screen assets from Binance USDⓈ-M Futures Top Movers categories.",
+      "acceptanceCriteria": [
+        "Create internal/watcher/top_movers.go",
+        "Define TopMoverCategory enum matching Binance's official categories",
+        "Fetch all perpetual tickers via GET /fapi/v1/ticker/24hr (weight: 40)",
+        "Categorize by Binance thresholds: Small (3-7%), Mid (7-11%), High (>11%)",
+        "Support categories: 5min Rise/Fall, 2hr Rise/Fall, Price+HighVol, Pullback",
+        "Filter by 24h quoteVolume > $10M",
+        "Return sorted list by absolute priceChangePercent",
+        "Refresh every 10 seconds per Binance spec",
+        "Add unit tests with mock API response",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": "Core screening using Binance's official Top Movers API. See docs/TRADING_STRATEGY.md for category definitions."
+    },
+    {
+      "id": "US-032",
+      "title": "Implement momentum scoring for asset selection",
+      "description": "As a trader, I need momentum-based ranking of top movers.",
+      "acceptanceCriteria": [
+        "Create internal/watcher/momentum_scorer.go",
+        "Calculate composite score from: RSI, MACD, volume increase, trend alignment",
+        "Weight factors: RSI=25%, MACD=25%, Volume=30%, Trend=20%",
+        "Rank assets by momentum score",
+        "Select top 5 assets for active monitoring",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": "Momentum-based selection"
+    },
+    {
+      "id": "US-033",
+      "title": "Implement dynamic position sizing",
+      "description": "As a trader, I need position sizes based on account balance and conditions.",
+      "acceptanceCriteria": [
+        "Create internal/risk/position_sizer.go",
+        "Base risk: 1% of account balance",
+        "Adjust for confidence level (0.5x to 2.0x)",
+        "Adjust for win/loss streak (reduce after 2 losses, increase after 3 wins)",
+        "Adjust for volatility (inverse relationship)",
+        "Respect max total exposure (10% of balance)",
+        "Add unit tests",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 33,
+      "passes": false,
+      "notes": "Smart position sizing"
+    },
+    {
+      "id": "US-034",
+      "title": "Implement dynamic leverage calculation",
+      "description": "As a trader, I need leverage adjusted for volatility and account health.",
+      "acceptanceCriteria": [
+        "Create internal/risk/leverage_calculator.go",
+        "Base leverage from confidence (10x at 50%, 25x at 75%)",
+        "Adjust for volatility (high vol = lower leverage)",
+        "Adjust for account health (margin ratio)",
+        "Enforce min 5x, max 50x range",
+        "Add leverage rules table from docs/TRADING_STRATEGY.md",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 34,
+      "passes": false,
+      "notes": "Dynamic leverage"
+    },
+    {
+      "id": "US-035",
+      "title": "Implement trailing take profit",
+      "description": "As a trader, I need trailing TP to lock in profits.",
+      "acceptanceCriteria": [
+        "Create internal/risk/trailing_tp.go",
+        "Activation threshold: configurable (default 0.3%)",
+        "Trailing distance: configurable (default 0.15%)",
+        "Track highest PnL and update trailing stop",
+        "Trigger close when price retraces past trailing stop",
+        "Log trailing TP activations and closures",
+        "Add unit tests for long and short positions",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 35,
+      "passes": false,
+      "notes": "Trailing take profit for profit maximization"
+    },
+    {
+      "id": "US-036",
+      "title": "Implement first trade rule (1 USDT PnL target)",
+      "description": "As a trader, I need the first trade of each session to target exactly 1 USDT profit.",
+      "acceptanceCriteria": [
+        "Create internal/strategy/first_trade.go",
+        "IsFirstTrade flag resets at session start",
+        "Calculate position size for 1 USDT profit at 0.5% move",
+        "Use conservative leverage (10-15x) for first trade",
+        "Fixed TP at 0.5% with 1:1 R:R stop loss",
+        "After first trade completes, enable LLM brain for subsequent trades",
+        "Session resets after 4 hours of no trades",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 36,
+      "passes": false,
+      "notes": "CRITICAL: First trade validation before aggressive trading"
+    },
+    {
+      "id": "US-037",
+      "title": "Implement session management",
+      "description": "As a trader, I need session tracking and resets.",
+      "acceptanceCriteria": [
+        "Create internal/strategy/session.go",
+        "Track session start time, trade count, PnL",
+        "Reset IsFirstTrade at session start",
+        "Max session duration: 4 hours",
+        "Pause after session: 30 minutes",
+        "Daily trade limit: 50 trades",
+        "Daily loss limit: 5% drawdown triggers pause",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 37,
+      "passes": false,
+      "notes": "Session management for discipline"
+    },
+    {
+      "id": "US-038",
+      "title": "Integrate screening with trading loop",
+      "description": "As a trader, I need the trading loop to use Top Movers screening.",
+      "acceptanceCriteria": [
+        "Trading loop fetches Top Movers every 60 seconds",
+        "Applies momentum scoring to select top 5 assets",
+        "Monitors selected assets for entry signals",
+        "Re-screens if no opportunities in 5 minutes",
+        "Log screening results and selected assets",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 38,
+      "passes": false,
+      "notes": "Connect screening to execution"
+    },
+    {
+      "id": "US-039",
+      "title": "Integrate first trade rule with brain engine",
+      "description": "As a trader, I need the brain to respect the first trade rule.",
+      "acceptanceCriteria": [
+        "Brain checks IsFirstTrade before making decisions",
+        "If first trade: use FirstTradeRule calculations, not LLM",
+        "If subsequent: LLM brain decides with full flexibility",
+        "Log which mode is active for each trade",
+        "Memory records first trade outcomes separately",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 39,
+      "passes": false,
+      "notes": "Brain respects first trade rule"
+    },
+    {
+      "id": "US-040",
+      "title": "Add trading strategy configuration",
+      "description": "As a trader, I need configurable strategy parameters.",
+      "acceptanceCriteria": [
+        "Create configs/trading_strategy.json",
+        "Include all parameters from docs/TRADING_STRATEGY.md",
+        "Load config at startup",
+        "Support hot-reload of non-critical parameters",
+        "Validate config values on load",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 40,
+      "passes": false,
+      "notes": "Configuration for strategy tuning"
+    },
+    {
+      "id": "US-041",
+      "title": "Implement data parsing and validation layer",
+      "description": "As a developer, I need all API data properly parsed and validated.",
+      "acceptanceCriteria": [
+        "Create internal/market/types.go with Binance API response types",
+        "Create parsed types with proper Go types (float64, time.Time)",
+        "Implement ParseTicker24hr, ParseOrderBook, ParsePosition, ParseAccountInfo",
+        "Add validation rules for each data type",
+        "Log parse errors without crashing",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 41,
+      "passes": false,
+      "notes": "Data integrity layer - see internal/market/"
+    },
+    {
+      "id": "US-042",
+      "title": "Implement system health checker",
+      "description": "As an operator, I need health checks for all system components.",
+      "acceptanceCriteria": [
+        "Create internal/health/health.go",
+        "Check platform compatibility (Intel Mac, Linux x64/ARM64)",
+        "Check Binance API connectivity and auth",
+        "Check Ollama connectivity",
+        "Check OpenRouter connectivity",
+        "Check file permissions (security)",
+        "Check disk space",
+        "Check system dependencies",
+        "Return overall health status",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 42,
+      "passes": false,
+      "notes": "Health checks for startup and runtime"
+    },
+    {
+      "id": "US-043",
+      "title": "Implement real-time system monitor",
+      "description": "As an operator, I need real-time monitoring of system state.",
+      "acceptanceCriteria": [
+        "Create internal/health/monitor.go",
+        "Track runtime metrics (memory, goroutines, uptime)",
+        "Track trading metrics (positions, trades, PnL)",
+        "Track wallet state",
+        "Track API metrics (latency, errors, rate limits)",
+        "Provide callbacks for TUI updates",
+        "Thread-safe with proper locking",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 43,
+      "passes": false,
+      "notes": "Real-time monitoring for TUI"
+    },
+    {
+      "id": "US-044",
+      "title": "Implement comprehensive TUI dashboard",
+      "description": "As a trader, I need a terminal dashboard showing all trading information.",
+      "acceptanceCriteria": [
+        "Create internal/ui/tui.go",
+        "Header with status, uptime, API latency, memory",
+        "Wallet section with balance, PnL, margin",
+        "Positions table with entry, mark, PnL, liquidation distance",
+        "Top Movers table with category, change, volume, momentum score",
+        "Recent trades table with PnL and reason",
+        "Brain log showing LLM decisions",
+        "Color-coded status indicators (green/yellow/red)",
+        "Compatible with Intel Mac and Linux terminals",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 44,
+      "passes": false,
+      "notes": "TUI dashboard - see internal/ui/"
+    },
+    {
+      "id": "US-045",
+      "title": "Implement startup preflight checks",
+      "description": "As an operator, I need preflight validation before trading starts.",
+      "acceptanceCriteria": [
+        "Create internal/startup/preflight.go",
+        "Display startup banner",
+        "Load configuration from environment",
+        "Run all health checks",
+        "Validate API keys are not placeholders",
+        "Warn about mainnet mode",
+        "Check LLM availability",
+        "Print summary with pass/fail status",
+        "Block startup on critical failures",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 45,
+      "passes": false,
+      "notes": "Preflight checks before trading"
+    },
+    {
+      "id": "US-046",
+      "title": "Implement LLM brain with aggressive trader persona",
+      "description": "As a trader, I need an LLM brain that trades aggressively with high leverage and small positions.",
+      "acceptanceCriteria": [
+        "Create internal/brain/aggressive_trader.go",
+        "Persona: Aggressive Trader, High Risk, High Leverage, Small Position Size",
+        "Decision prompt includes persona context",
+        "Leverage range: 20-50x",
+        "Position risk: 1-2% of balance",
+        "Fast decision making (<2 seconds)",
+        "Flexible strategy selection (momentum, pullback, volume spike)",
+        "Skip trade when confidence < 50%",
+        "Query memory before decisions",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 46,
+      "passes": false,
+      "notes": "LLM brain with aggressive trading persona - see docs/LLM_WORKFLOW.md"
+    },
+    {
+      "id": "US-047",
+      "title": "Implement LLM decision validation",
+      "description": "As a developer, I need LLM decisions validated against hard limits.",
+      "acceptanceCriteria": [
+        "Parse LLM JSON response with fallback handling",
+        "Clamp leverage to 50x max",
+        "Clamp position size to 2% max",
+        "Ensure liquidation distance >= 5%",
+        "Override if first trade (use 1 USDT rule)",
+        "Check circuit breakers before execution",
+        "Check liquidity and spread before execution",
+        "Check funding rate before entry",
+        "Log all validation adjustments",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 47,
+      "passes": false,
+      "notes": "Enforce boundaries on LLM decisions"
+    },
+    {
+      "id": "US-048",
+      "title": "Implement flexible strategy framework",
+      "description": "As a trader, I need the LLM to choose from multiple strategies.",
+      "acceptanceCriteria": [
+        "Define strategy types: Momentum Scalp, Pullback Entry, Volume Spike, Counter-Trend",
+        "Each strategy has different leverage, target, stop, duration",
+        "LLM selects strategy based on market conditions",
+        "Strategy parameters are configurable",
+        "Log which strategy was selected for each trade",
+        "Track performance per strategy for adaptation",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 48,
+      "passes": false,
+      "notes": "Multiple strategies, LLM chooses"
+    },
+    {
+      "id": "US-049",
+      "title": "Implement position re-evaluation loop",
+      "description": "As a trader, I need open positions re-evaluated periodically.",
+      "acceptanceCriteria": [
+        "Every 30 seconds, ask LLM: Hold, Add, or Exit?",
+        "LLM can suggest early exit on exhaustion signals",
+        "LLM can suggest adding to winning position",
+        "LLM can suggest tightening stops",
+        "Don't re-evaluate during first 30 seconds of trade",
+        "Log all re-evaluation decisions",
+        "go build -buildvcs=false ./... passes"
+      ],
+      "priority": 49,
+      "passes": false,
+      "notes": "Active position management by LLM"
+    },
+    {
+      "id": "US-050",
+      "title": "Add cross-platform compatibility tests",
+      "description": "As a developer, I need the bot tested on Intel Mac and Linux.",
+      "acceptanceCriteria": [
+        "Test on darwin/amd64 (Intel Mac)",
+        "Test on linux/amd64",
+        "Test on linux/arm64 (optional)",
+        "No platform-specific code without build tags",
+        "TUI renders correctly on all platforms",
+        "File operations work on all platforms",
+        "Document any platform-specific requirements",
+        "go build -buildvcs=false ./... passes on all platforms"
+      ],
+      "priority": 50,
+      "passes": false,
+      "notes": "Cross-platform compatibility"
+    }
+  ]
+}

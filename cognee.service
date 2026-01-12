@@ -1,0 +1,36 @@
+[Unit]
+Description=Cognee HFT Mainnet Engine
+# Ensure network is up before starting
+After=network.target network-online.target
+Wants=network-online.target
+# Rate limiting: 5 restarts in 10 minutes, then stop to prevent loops
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=YOUR_USER
+Group=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/GOBOT
+# Path to your compiled binary
+ExecStart=/home/YOUR_USER/GOBOT/gobot --mainnet
+# Load your locked-down environment variables
+EnvironmentFile=/home/YOUR_USER/GOBOT/.env
+
+# Restart Policy
+Restart=on-failure
+# Wait 5 seconds before restarting to allow exchange rate-limits to cool
+RestartSec=5s
+
+# Security Hardening
+# Prevent Cognee from gaining new privileges
+NoNewPrivileges=true
+# Give the process its own /tmp and /dev/shm
+PrivateTmp=true
+
+# Logging
+StandardOutput=append:/home/YOUR_USER/GOBOT/logs/cognee.log
+StandardError=append:/home/YOUR_USER/GOBOT/logs/error.log
+
+[Install]
+WantedBy=multi-user.target

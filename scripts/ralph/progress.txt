@@ -1,0 +1,11 @@
+# Ralph Progress Log
+Started: Mon 12 Jan 2026 10:43:00 +03
+---
+
+## Codebase Patterns
+- Use types.PositionState from pkg/types to avoid circular dependencies between internal/agent and pkg/platform
+- Binance futures OrderType only has LIMIT, MARKET, LIQUIDATION constants - use string literals for STOP and TAKE_PROFIT
+- NewMarkPriceService is deprecated - use NewPremiumIndexService instead
+- Always check for import cycles when packages reference each other
+---
+
