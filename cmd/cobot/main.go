@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,6 +21,7 @@ import (
 	"github.com/britebrt/cognee/domain/strategy"
 	"github.com/britebrt/cognee/infra/binance"
 	"github.com/britebrt/cognee/services/executor/market"
+	"github.com/britebrt/cognee/services/screenshot"
 	"github.com/britebrt/cognee/services/selector/volume"
 	"github.com/britebrt/cognee/services/strategy/scalper"
 )
@@ -176,6 +178,85 @@ func startWebhookServer(ctx context.Context, cfg *config.N8NConfig) {
 
 		log.Printf("Received market analysis from N8N: %v", data)
 		w.WriteHeader(http.StatusOK)
+	})
+
+	// TradingView Screenshot endpoint - triggered by GOBOT
+	mux.HandleFunc("/webhook/capture-chart", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Symbol    string   `json:"symbol"`
+			Intervals []string `json:"intervals,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		if req.Symbol == "" {
+			http.Error(w, "Missing symbol", http.StatusBadRequest)
+			return
+		}
+
+		if len(req.Intervals) == 0 {
+			req.Intervals = []string{"1m", "5m", "15m"}
+		}
+
+		log.Printf("📸 Capturing charts for %s at %v", req.Symbol, req.Intervals)
+
+		// Call TradingView screenshot service
+		screenshotClient := screenshot.NewClient(screenshot.Config{
+			ServerURL: "http://localhost:3000",
+		}, slog.Default())
+
+		result, err := screenshotClient.CaptureMulti(req.Symbol, req.Intervals)
+		if err != nil {
+			log.Printf("Screenshot failed: %v", err)
+			http.Error(w, fmt.Sprintf("Screenshot failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("✅ Captured %d charts for %s", len(result.Results), req.Symbol)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
+	// Trigger QuantCrawler analysis with screenshots
+	mux.HandleFunc("/webhook/analyze-symbol", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Symbol         string  `json:"symbol"`
+			AccountBalance float64 `json:"account_balance"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		if req.Symbol == "" {
+			http.Error(w, "Missing symbol", http.StatusBadRequest)
+			return
+		}
+
+		log.Printf("🎯 Starting analysis workflow for %s", req.Symbol)
+
+		// Step 1: Capture screenshots
+		screenshotClient := screenshot.NewClient(screenshot.Config{
+			ServerURL: "http://localhost:3000",
+		}, slog.Default())
+
+		result, err := screenshotClient.CaptureMulti(req.Symbol, []string{"1m", "5m", "15m"})
+		if err != nil {
+			log.Printf("Screenshot failed: %v", err)
+		}
+
+		log.Printf("📊 Charts captured, ready for analysis")
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"symbol":      req.Symbol,
+			"screenshots": result.Results,
+			"status":      "ready_for_analysis",
+			"next_step":   "Send to QuantCrawler for AI analysis",
+		})
 	})
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
