@@ -106,8 +106,8 @@ func runTestTrade(symbol, side string, aggressive bool) {
 	config := brain.DefaultBrainConfig()
 	if aggressive {
 		// Use aggressive settings for testing
-		config.LocalModel = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF/LFM2.5-1.2B-Instruct-Q8_0.gguf"
-		config.LocalBaseURL = "http://localhost:11454"
+		config.LocalModel = "qwen3:0.6b"
+		config.LocalBaseURL = "http://localhost:11964"
 		config.InferenceMode = "LOCAL"
 		logrus.Info("Using aggressive test settings")
 	}
@@ -155,8 +155,8 @@ func runTestTrade(symbol, side string, aggressive bool) {
 		// Try direct provider approach
 		// Create a simple provider for testing
 		testProvider, err := brain.NewOllamaProvider(brain.OllamaConfig{
-			Model:       "LiquidAI/LFM2.5-1.2B-Instruct-GGUF/LFM2.5-1.2B-Instruct-Q8_0.gguf",
-			BaseURL:     "http://localhost:11454",
+			Model:       "qwen3:0.6b",
+			BaseURL:     "http://localhost:11964",
 			Temperature: 0.1,
 			Timeout:     10 * time.Second,
 		})

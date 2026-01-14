@@ -27,51 +27,51 @@ type BrainConfig struct {
 
 // BrainEngine is the main AI engine that coordinates all brain functions
 type BrainEngine struct {
-	provider       Provider
-	feedback       interface{} // Simplified - would be *feedback.CogneeFeedbackSystem
-	client         *futures.Client
-	
-	config         BrainConfig
-	
+	provider Provider
+	feedback interface{} // Simplified - would be *feedback.CogneeFeedbackSystem
+	client   *futures.Client
+
+	config BrainConfig
+
 	// State management
-	mu             sync.RWMutex
-	isRunning      bool
-	shutdownChan   chan struct{}
-	wg             sync.WaitGroup
-	
+	mu           sync.RWMutex
+	isRunning    bool
+	shutdownChan chan struct{}
+	wg           sync.WaitGroup
+
 	// Performance tracking
-	startTime      time.Time
-	decisionsMade  int
-	recoveryCount  int
+	startTime     time.Time
+	decisionsMade int
+	recoveryCount int
 }
 
 // NewBrainEngine creates a new brain engine
 func NewBrainEngine(client *futures.Client, feedback interface{}, config BrainConfig) (*BrainEngine, error) {
 	// Set default configuration for LiquidAI LFM2.5
 	if config.LocalModel == "" {
-		config.LocalModel = "lfm2.5-1.2b-instruct-q8_0:latest" // Available model from msty
+		config.LocalModel = "qwen3:0.6b" // Available model from msty
 	}
 	if config.LocalBaseURL == "" {
 		config.LocalBaseURL = "http://localhost:11964" // msty port
 	}
-	
+
 	// Create the main provider using the configuration
 	providerConfig := ProviderConfig{
-		Mode:        InferenceMode(config.InferenceMode),
-		LocalModel:  config.LocalModel,
-		LocalBaseURL: config.LocalBaseURL,
-		CloudAPIKey: config.CloudAPIKey,
-		CloudProvider: config.CloudProvider,
-		MaxRetries:  3,
-		Timeout:     config.DecisionTimeout,
+		Mode:                InferenceMode(config.InferenceMode),
+		LocalModel:          config.LocalModel,
+		LocalBaseURL:        config.LocalBaseURL,
+		CloudAPIKey:         config.CloudAPIKey,
+		CloudProvider:       config.CloudProvider,
+		MaxRetries:          3,
+		Timeout:             config.DecisionTimeout,
 		ComplexityThreshold: 500,
 	}
-	
+
 	provider, err := NewLLMProviderWithConfig(providerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize provider: %w", err)
 	}
-	
+
 	engine := &BrainEngine{
 		provider:     provider,
 		feedback:     feedback,
@@ -82,10 +82,10 @@ func NewBrainEngine(client *futures.Client, feedback interface{}, config BrainCo
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"inference_mode": config.InferenceMode,
-		"local_model":    config.LocalModel,
-		"local_base_url": config.LocalBaseURL,
-		"cloud_provider": config.CloudProvider,
+		"inference_mode":  config.InferenceMode,
+		"local_model":     config.LocalModel,
+		"local_base_url":  config.LocalBaseURL,
+		"cloud_provider":  config.CloudProvider,
 		"enable_recovery": config.EnableRecovery,
 	}).Info("GOBOT LiquidAI LFM2.5 brain engine initialized")
 
@@ -123,7 +123,7 @@ func (e *BrainEngine) Stop() error {
 
 	// Signal shutdown
 	close(e.shutdownChan)
-	
+
 	// Wait for all goroutines to finish
 	done := make(chan struct{})
 	go func() {
@@ -150,7 +150,7 @@ func (e *BrainEngine) startBackgroundMonitoring() {
 	// Health monitoring
 	e.wg.Add(1)
 	go e.healthMonitoring()
-	
+
 	// Performance monitoring
 	e.wg.Add(1)
 	go e.performanceMonitoring()
@@ -215,21 +215,21 @@ func (e *BrainEngine) AnalyzeMarket(ctx context.Context, marketData interface{})
 
 // TradingDecision represents an AI-generated trading decision
 type TradingDecision struct {
-	Decision           string  `json:"decision"`
-	Confidence         float64 `json:"confidence"`
-	Reasoning          string `json:"reasoning"`
-	RiskLevel          string `json:"risk_level"`
-	RecommendedLeverage int    `json:"recommended_leverage"`
-	Symbol             string `json:"symbol"`
-	FVGConfidence      float64 `json:"fvg_confidence"`
-	CVDDivergence      bool    `json:"cvd_divergence"`
+	Decision            string  `json:"decision"`
+	Confidence          float64 `json:"confidence"`
+	Reasoning           string  `json:"reasoning"`
+	RiskLevel           string  `json:"risk_level"`
+	RecommendedLeverage int     `json:"recommended_leverage"`
+	Symbol              string  `json:"symbol"`
+	FVGConfidence       float64 `json:"fvg_confidence"`
+	CVDDivergence       bool    `json:"cvd_divergence"`
 }
 
 // MarketAnalysis represents AI-generated market analysis
 type MarketAnalysis struct {
-	MarketRegime       string                 `json:"market_regime"`
-	Confidence         float64                `json:"confidence"`
-	KeyFactors         []string               `json:"key_factors"`
+	MarketRegime        string                 `json:"market_regime"`
+	Confidence          float64                `json:"confidence"`
+	KeyFactors          []string               `json:"key_factors"`
 	StrategyAdjustments map[string]interface{} `json:"strategy_adjustments"`
 }
 
@@ -262,10 +262,10 @@ func (e *BrainEngine) GetEngineStats() map[string]interface{} {
 		"recoveries":     e.recoveryCount,
 		"is_running":     e.isRunning,
 		"provider": map[string]interface{}{
-			"model":        e.provider.GetModelName(),
-			"healthy":      e.provider.IsHealthy(),
-			"latency_ms":   e.provider.GetLatency().Milliseconds(),
-			"base_url":     e.config.LocalBaseURL,
+			"model":      e.provider.GetModelName(),
+			"healthy":    e.provider.IsHealthy(),
+			"latency_ms": e.provider.GetLatency().Milliseconds(),
+			"base_url":   e.config.LocalBaseURL,
 		},
 	}
 }
@@ -275,7 +275,7 @@ func (e *BrainEngine) IncrementDecisions() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.decisionsMade++
-	
+
 	logrus.WithField("total_decisions", e.decisionsMade).Debug("Trading decision executed")
 }
 
@@ -306,7 +306,7 @@ func (e *BrainEngine) validateDecision(decision *TradingDecision) error {
 
 func (e *BrainEngine) healthMonitoring() {
 	defer e.wg.Done()
-	
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -326,7 +326,7 @@ func (e *BrainEngine) healthMonitoring() {
 
 func (e *BrainEngine) performanceMonitoring() {
 	defer e.wg.Done()
-	
+
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
@@ -338,14 +338,14 @@ func (e *BrainEngine) performanceMonitoring() {
 			decisions := e.decisionsMade
 			recoveries := e.recoveryCount
 			e.mu.RUnlock()
-			
+
 			logrus.WithFields(logrus.Fields{
-				"uptime":          uptime.Round(time.Second),
-				"decisions_made":  decisions,
-				"recoveries":      recoveries,
-				"provider":        e.provider.GetModelName(),
+				"uptime":           uptime.Round(time.Second),
+				"decisions_made":   decisions,
+				"recoveries":       recoveries,
+				"provider":         e.provider.GetModelName(),
 				"provider_healthy": e.provider.IsHealthy(),
-				"base_url":        e.config.LocalBaseURL,
+				"base_url":         e.config.LocalBaseURL,
 			}).Info("GOBOT LFM2.5 performance metrics")
 		case <-e.shutdownChan:
 			return
@@ -355,13 +355,13 @@ func (e *BrainEngine) performanceMonitoring() {
 
 func (e *BrainEngine) generateFinalReport() {
 	stats := e.GetEngineStats()
-	
+
 	logrus.WithFields(logrus.Fields{
-		"uptime":         stats["uptime"],
+		"uptime":          stats["uptime"],
 		"total_decisions": stats["decisions_made"],
-		"recoveries":     stats["recoveries"],
-		"provider_model": e.provider.GetModelName(),
-		"base_url":       e.config.LocalBaseURL,
+		"recoveries":      stats["recoveries"],
+		"provider_model":  e.provider.GetModelName(),
+		"base_url":        e.config.LocalBaseURL,
 	}).Info("GOBOT LFM2.5 - Final shutdown report")
 
 	// Save detailed report to file
@@ -386,14 +386,14 @@ func (e *BrainEngine) saveReportToFile(filename string, data interface{}) error 
 // DefaultBrainConfig returns default configuration for the brain engine
 func DefaultBrainConfig() BrainConfig {
 	return BrainConfig{
-		InferenceMode:          "LOCAL",
-		LocalModel:             "LiquidAI/LFM2.5-1.2B-Instruct-GGUF/LFM2.5-1.2B-Instruct-Q8_0.gguf", // Available model from msty
-		LocalBaseURL:           "http://localhost:11454", // msty port
-		CloudAPIKey:            os.Getenv("OPENAI_API_KEY"),
-		CloudProvider:          "openai",
+		InferenceMode:          "CLOUD",
+		LocalModel:             "qwen3:0.6b",             // Available model from msty
+		LocalBaseURL:           "http://localhost:11964", // msty port with LFM2.5
+		CloudAPIKey:            os.Getenv("GEMINI_API_KEY"),
+		CloudProvider:          "gemini",
 		EnableRecovery:         true,
 		RecoveryInterval:       30 * time.Second,
-		DecisionTimeout:        8 * time.Second, // Faster for LFM2.5
+		DecisionTimeout:        15 * time.Second, // Gemini is fast
 		MaxConcurrentDecisions: 5,
 	}
 }

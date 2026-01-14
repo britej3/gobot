@@ -15,22 +15,22 @@ import (
 type Provider interface {
 	// GenerateResponse sends a prompt and returns the model's response
 	GenerateResponse(ctx context.Context, prompt string) (string, error)
-	
+
 	// GenerateStructuredResponse sends a prompt and returns a structured response
 	GenerateStructuredResponse(ctx context.Context, prompt string, response interface{}) error
-	
+
 	// GetModelName returns the name of the current model
 	GetModelName() string
-	
+
 	// GetLatency returns the average latency of the provider
 	GetLatency() time.Duration
-	
+
 	// IsHealthy checks if the provider is operational
 	IsHealthy() bool
-	
+
 	// TradingDecisionPrompt generates a trading decision prompt
 	TradingDecisionPrompt(signalData interface{}) string
-	
+
 	// MarketAnalysisPrompt generates a market analysis prompt
 	MarketAnalysisPrompt(marketData interface{}) string
 }
@@ -39,42 +39,42 @@ type Provider interface {
 type InferenceMode string
 
 const (
-	ModeLocal InferenceMode = "LOCAL"    // Local Ollama inference
-	ModeCloud InferenceMode = "CLOUD"    // Cloud API inference (OpenAI/Anthropic)
-	ModeAuto  InferenceMode = "AUTO"     // Auto-switch based on complexity
+	ModeLocal InferenceMode = "LOCAL" // Local Ollama inference
+	ModeCloud InferenceMode = "CLOUD" // Cloud API inference (OpenAI/Anthropic)
+	ModeAuto  InferenceMode = "AUTO"  // Auto-switch based on complexity
 )
 
 // LLMProvider manages dual inference configuration
 type LLMProvider struct {
-	currentMode  InferenceMode
-	localProvider  Provider
-	cloudProvider  Provider
-	lastLatency  time.Duration
-	healthStatus bool
+	currentMode   InferenceMode
+	localProvider Provider
+	cloudProvider Provider
+	lastLatency   time.Duration
+	healthStatus  bool
 }
 
 // ProviderConfig holds configuration for LLM providers
 type ProviderConfig struct {
-	Mode           InferenceMode `json:"mode"`
-	LocalModel     string        `json:"local_model"`
-	LocalBaseURL   string        `json:"local_base_url"`
-	CloudAPIKey    string        `json:"cloud_api_key"`
-	CloudProvider  string        `json:"cloud_provider"` // "openai" or "anthropic"
-	MaxRetries     int           `json:"max_retries"`
-	Timeout        time.Duration `json:"timeout"`
-	ComplexityThreshold int      `json:"complexity_threshold"` // When to switch to cloud
+	Mode                InferenceMode `json:"mode"`
+	LocalModel          string        `json:"local_model"`
+	LocalBaseURL        string        `json:"local_base_url"`
+	CloudAPIKey         string        `json:"cloud_api_key"`
+	CloudProvider       string        `json:"cloud_provider"` // "openai", "anthropic", or "gemini"
+	MaxRetries          int           `json:"max_retries"`
+	Timeout             time.Duration `json:"timeout"`
+	ComplexityThreshold int           `json:"complexity_threshold"` // When to switch to cloud
 }
 
 // NewLLMProvider creates a new dual inference provider
 func NewLLMProvider(mode string) Provider {
 	config := ProviderConfig{
-		Mode:        InferenceMode(mode),
-		LocalModel:  getEnvString("OLLAMA_MODEL", "lfm2.5-1.2b-instruct-q8_0:latest"), // Updated to match available model
-		LocalBaseURL: getEnvString("OLLAMA_BASE_URL", "http://localhost:11964"), // msty port
-		CloudAPIKey: os.Getenv("OPENAI_API_KEY"),
-		CloudProvider: getEnvString("CLOUD_PROVIDER", "openai"),
-		MaxRetries:  3,
-		Timeout:     8 * time.Second, // Faster timeout for LFM2.5
+		Mode:                InferenceMode(mode),
+		LocalModel:          getEnvString("OLLAMA_MODEL", "qwen3:0.6b"),                // Updated to match available model
+		LocalBaseURL:        getEnvString("OLLAMA_BASE_URL", "http://localhost:11964"), // msty port
+		CloudAPIKey:         os.Getenv("GEMINI_API_KEY"),
+		CloudProvider:       getEnvString("CLOUD_PROVIDER", "gemini"),
+		MaxRetries:          3,
+		Timeout:             15 * time.Second, // Faster timeout for Gemini
 		ComplexityThreshold: 500,
 	}
 
@@ -88,18 +88,18 @@ func NewLLMProvider(mode string) Provider {
 // NewLLMProviderWithConfig creates a new LLM provider with specific configuration
 func NewLLMProviderWithConfig(config ProviderConfig) (*LLMProvider, error) {
 	provider := &LLMProvider{
-		currentMode: config.Mode,
+		currentMode:  config.Mode,
 		healthStatus: true,
 	}
 
 	// Initialize local provider (Ollama) with LFM2.5
 	if config.LocalModel == "" {
-		config.LocalModel = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF/LFM2.5-1.2B-Instruct-Q8_0.gguf"
+		config.LocalModel = "qwen3:0.6b"
 	}
 	if config.LocalBaseURL == "" {
-		config.LocalBaseURL = "http://localhost:11454" // msty port
+		config.LocalBaseURL = "http://localhost:11964" // msty port with LFM2.5
 	}
-	
+
 	localProvider, err := NewOllamaProvider(OllamaConfig{
 		Model:   config.LocalModel,
 		BaseURL: config.LocalBaseURL,
@@ -110,8 +110,16 @@ func NewLLMProviderWithConfig(config ProviderConfig) (*LLMProvider, error) {
 	}
 	provider.localProvider = localProvider
 
-	// Initialize cloud provider if API key provided
-	if config.CloudAPIKey != "" {
+	// Initialize cloud provider if API key provided and not a placeholder
+	isPlaceholder := config.CloudAPIKey == "" ||
+		config.CloudAPIKey == "YOUR_GEMINI_API_KEY_HERE" ||
+		config.CloudAPIKey == "your_api_key_here" ||
+		config.CloudAPIKey == "YOUR_API_KEY_HERE" ||
+		config.CloudAPIKey == "your_openai_api_key" ||
+		config.CloudAPIKey == "YOUR_OPENAI_API_KEY" ||
+		len(config.CloudAPIKey) < 20
+
+	if config.CloudAPIKey != "" && !isPlaceholder {
 		cloudProvider, err := NewCloudProvider(CloudConfig{
 			APIKey:   config.CloudAPIKey,
 			Provider: config.CloudProvider,
@@ -121,7 +129,12 @@ func NewLLMProviderWithConfig(config ProviderConfig) (*LLMProvider, error) {
 			logrus.Warnf("Failed to initialize cloud provider: %v", err)
 		} else {
 			provider.cloudProvider = cloudProvider
+			logrus.WithField("provider", config.CloudProvider).Info("Cloud provider successfully initialized")
 		}
+	} else if isPlaceholder {
+		logrus.Warn("Cloud provider API key is placeholder - using local model only")
+		logrus.Info("To use cloud AI, update .env with your actual API key:")
+		logrus.Info("  GEMINI_API_KEY=your_real_api_key_here")
 	}
 
 	if config.MaxRetries == 0 {
@@ -135,10 +148,10 @@ func NewLLMProviderWithConfig(config ProviderConfig) (*LLMProvider, error) {
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"mode":        config.Mode,
-		"local_model": config.LocalModel,
+		"mode":           config.Mode,
+		"local_model":    config.LocalModel,
 		"local_base_url": config.LocalBaseURL,
-		"has_cloud":   provider.cloudProvider != nil,
+		"has_cloud":      provider.cloudProvider != nil,
 	}).Info("GOBOT LiquidAI LFM2.5 Provider initialized")
 
 	return provider, nil
@@ -147,41 +160,41 @@ func NewLLMProviderWithConfig(config ProviderConfig) (*LLMProvider, error) {
 // GenerateResponse generates a response using the appropriate provider
 func (p *LLMProvider) GenerateResponse(ctx context.Context, prompt string) (string, error) {
 	startTime := time.Now()
-	
+
 	// Determine which provider to use
 	provider, mode := p.selectProvider(prompt)
-	
+
 	logrus.WithFields(logrus.Fields{
-		"mode":   mode,
-		"model":  provider.GetModelName(),
+		"mode":          mode,
+		"model":         provider.GetModelName(),
 		"prompt_length": len(prompt),
 	}).Debug("Generating response with LiquidAI LFM2.5")
 
 	// Generate response with retries
 	var response string
 	var err error
-	
+
 	for attempt := 0; attempt < 3; attempt++ {
 		response, err = provider.GenerateResponse(ctx, prompt)
 		if err == nil {
 			break
 		}
-		
+
 		logrus.WithError(err).WithField("attempt", attempt+1).Warn("Response generation failed, retrying")
 		time.Sleep(time.Duration(attempt+1) * time.Second)
 	}
-	
+
 	if err != nil {
 		p.healthStatus = false
 		return "", fmt.Errorf("failed to generate response after 3 attempts: %w", err)
 	}
-	
+
 	p.lastLatency = time.Since(startTime)
 	p.healthStatus = true
-	
+
 	logrus.WithFields(logrus.Fields{
-		"mode":     mode,
-		"latency":  p.lastLatency,
+		"mode":            mode,
+		"latency":         p.lastLatency,
 		"response_length": len(response),
 	}).Debug("LFM2.5 response generated successfully")
 
@@ -195,12 +208,12 @@ func (p *LLMProvider) GenerateStructuredResponse(ctx context.Context, prompt str
 	if err != nil {
 		return err
 	}
-	
+
 	// Parse JSON response
 	if err := json.Unmarshal([]byte(textResponse), response); err != nil {
 		return fmt.Errorf("failed to parse structured response: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -209,21 +222,21 @@ func (p *LLMProvider) selectProvider(prompt string) (Provider, InferenceMode) {
 	switch p.currentMode {
 	case ModeLocal:
 		return p.localProvider, ModeLocal
-		
+
 	case ModeCloud:
 		if p.cloudProvider != nil {
 			return p.cloudProvider, ModeCloud
 		}
 		logrus.Warn("Cloud provider not available, falling back to local LFM2.5")
 		return p.localProvider, ModeLocal
-		
+
 	case ModeAuto:
 		// Auto-switch based on prompt complexity and urgency
 		if p.isHighComplexityPrompt(prompt) && p.cloudProvider != nil {
 			return p.cloudProvider, ModeCloud
 		}
 		return p.localProvider, ModeLocal
-		
+
 	default:
 		return p.localProvider, ModeLocal
 	}
@@ -233,14 +246,14 @@ func (p *LLMProvider) selectProvider(prompt string) (Provider, InferenceMode) {
 func (p *LLMProvider) isHighComplexityPrompt(prompt string) bool {
 	// Simple heuristics for complexity detection
 	wordCount := len(strings.Fields(prompt))
-	
+
 	// High complexity indicators
 	complexityKeywords := []string{
 		"comprehensive", "detailed", "analysis", "strategy", "planning",
 		"weekend", "monthly", "quarterly", "annual", "long-term",
 		"complex", "multi-factor", "correlation", "regression", "prediction",
 	}
-	
+
 	// Check for complexity keywords
 	promptLower := strings.ToLower(prompt)
 	keywordCount := 0
@@ -249,12 +262,12 @@ func (p *LLMProvider) isHighComplexityPrompt(prompt string) bool {
 			keywordCount++
 		}
 	}
-	
+
 	// Complexity decision logic for LFM2.5
 	if wordCount > 200 || keywordCount >= 3 {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -287,12 +300,12 @@ func (p *LLMProvider) GetCurrentMode() InferenceMode {
 
 // ProviderStats holds statistics about provider usage
 type ProviderStats struct {
-	LocalRequests   int           `json:"local_requests"`
-	CloudRequests   int           `json:"cloud_requests"`
-	TotalLatency    time.Duration `json:"total_latency"`
-	AverageLatency  time.Duration `json:"average_latency"`
-	Errors          int           `json:"errors"`
-	LastUsed        time.Time     `json:"last_used"`
+	LocalRequests  int           `json:"local_requests"`
+	CloudRequests  int           `json:"cloud_requests"`
+	TotalLatency   time.Duration `json:"total_latency"`
+	AverageLatency time.Duration `json:"average_latency"`
+	Errors         int           `json:"errors"`
+	LastUsed       time.Time     `json:"last_used"`
 }
 
 // GetStats returns provider usage statistics
@@ -317,7 +330,7 @@ func getEnvString(key, defaultValue string) string {
 // TradingDecisionPrompt generates a trading decision prompt
 func (p *LLMProvider) TradingDecisionPrompt(signalData interface{}) string {
 	dataJSON, _ := json.Marshal(signalData)
-	
+
 	return fmt.Sprintf(`
 You are GOBOT's trading decision AI powered by LiquidAI LFM2.5. Evaluate this trading signal for ultra-high-frequency scalping:
 
@@ -326,18 +339,18 @@ Signal Data: %s
 Decision criteria for LFM2.5:
 - FVG confidence > 0.75
 - CVD divergence present and strong
-- Volatility within optimal range (0.5-2.0%)
+- Volatility within optimal range (0.5-2.0%%)
 - No high-impact news events
 - Market microstructure favorable
 
-Provide your decision in JSON format:
-{
-  "decision": "BUY/SELL/HOLD",
-  "confidence": 0.85,
-  "reasoning": "Strong bullish FVG at $49,400 with CVD divergence",
-  "risk_level": "LOW/MEDIUM/HIGH",
-  "recommended_leverage": 20
-}
+ Provide your decision in JSON format:
+ {
+   "decision": "BUY/SELL/HOLD",
+   "confidence": 0.75,
+   "reasoning": "Strong bullish FVG at $49,400 with CVD divergence",
+   "risk_level": "LOW/MEDIUM/HIGH",
+   "recommended_leverage": 20
+ }
 
 Respond ultra-fast - this is for millisecond execution with LFM2.5.
 `, string(dataJSON))
@@ -346,7 +359,7 @@ Respond ultra-fast - this is for millisecond execution with LFM2.5.
 // MarketAnalysisPrompt generates a market analysis prompt
 func (p *LLMProvider) MarketAnalysisPrompt(marketData interface{}) string {
 	dataJSON, _ := json.Marshal(marketData)
-	
+
 	return fmt.Sprintf(`
 You are GOBOT's market analysis AI powered by LiquidAI LFM2.5. Analyze the following market data with millisecond precision:
 

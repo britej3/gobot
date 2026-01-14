@@ -1,0 +1,220 @@
+{
+  "name": "GOBOT - AI Market Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gobot-market-analysis",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [250, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const input = $input.first().json;\n\nreturn [\n  {\n    json: {\n      symbol: input.symbol || 'BTCUSDT',\n      timeframe: input.timeframe || '1h',\n      indicators: input.indicators || {},\n      price_data: input.price_data || {},\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "name": "Parse Request",
+      "type": "n8n-nodes-base.function",
+      "position": [450, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "resource": "marketData",
+        "symbol": "={{ $json.symbol }}",
+        "interval": "={{ $json.timeframe }}"
+      },
+      "name": "Get Binance Data",
+      "type": "n8n-nodes-binance.marketData",
+      "position": [650, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const market = $input.first().json;\nconst request = $('Parse Request').first().json;\n\n// Calculate additional indicators\nconst prices = market.candles || [];\nconst closes = prices.map(c => c.close);\n\n// Simple RSI calculation\nconst rsi = calculateRSI(closes, 14);\n\n// Simple MACD calculation\nconst macd = calculateMACD(closes, 12, 26);\n\n// Volume analysis\nconst volume = prices.reduce((sum, c) => sum + c.volume, 0);\nconst avgVolume = volume / prices.length;\n\n// Volatility\nconst volatility = calculateVolatility(closes);\n\nreturn [\n  {\n    json: {\n      symbol: request.symbol,\n      indicators: {\n        rsi: rsi,\n        macd: macd,\n        volatility: volatility,\n        volume_ratio: volume / avgVolume\n      },\n      current_price: closes[closes.length - 1],\n      high_24h: Math.max(...prices.map(c => c.high)),\n      low_24h: Math.min(...prices.map(c => c.low)),\n      volume_24h: volume\n    }\n  }\n];\n\nfunction calculateRSI(prices, period) {\n  if (prices.length < period + 1) return 50;\n  \n  let gains = 0, losses = 0;\n  \n  for (let i = prices.length - period; i < prices.length; i++) {\n    const change = prices[i] - prices[i - 1];\n    if (change > 0) gains += change;\n    else losses -= change;\n  }\n  \n  const avgGain = gains / period;\n  const avgLoss = losses / period;\n  \n  if (avgLoss === 0) return 100;\n  \n  const rs = avgGain / avgLoss;\n  return 100 - (100 / (1 + rs));\n}\n\nfunction calculateMACD(prices, fast, slow) {\n  if (prices.length < slow) return { macd: 0, signal: 0, histogram: 0 };\n  \n  const emaFast = calculateEMA(prices, fast);\n  const emaSlow = calculateEMA(prices, slow);\n  \n  const macd = emaFast - emaSlow;\n  const signal = calculateEMA([...prices.slice(-slow)], 9);\n  \n  return { macd, signal, histogram: macd - signal };\n}\n\nfunction calculateEMA(prices, period) {\n  const k = 2 / (period + 1);\n  let ema = prices[0];\n  \n  for (let i = 1; i < prices.length; i++) {\n    ema = prices[i] * k + ema * (1 - k);\n  }\n  \n  return ema;\n}\n\nfunction calculateVolatility(prices) {\n  if (prices.length < 2) return 0;\n  \n  const returns = [];\n  for (let i = 1; i < prices.length; i++) {\n    returns.push((prices[i] - prices[i-1]) / prices[i-1]);\n  }\n  \n  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;\n  const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;\n  \n  return Math.sqrt(variance) * 100;\n}"
+      },
+      "name": "Calculate Indicators",
+      "type": "n8n-nodes-base.function",
+      "position": [850, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "messages": {
+          "values": [
+            {
+              "content": "=Analyze this crypto market data and provide a trading signal:\n\nSymbol: {{ $json.symbol }}\nCurrent Price: ${{ $json.current_price }}\n24h High: ${{ $json.high_24h }}\n24h Low: ${{ $json.low_24h }}\n24h Volume: {{ $json.volume_24h }}\n\nIndicators:\n- RSI (14): {{ $json.indicators.rsi.toFixed(2) }}\n- MACD: {{ $json.indicators.macd.toFixed(4) }}\n- MACD Signal: {{ $json.indicators.signal.toFixed(4) }}\n- MACD Histogram: {{ $json.indicators.histogram.toFixed(4) }}\n- Volatility: {{ $json.indicators.volatility.toFixed(2) }}%\n- Volume Ratio: {{ $json.indicators.volume_ratio.toFixed(2) }}\n\nProvide a brief analysis (1-2 sentences) and one of: BUY, SELL, or HOLD with confidence 0.0-1.0"
+            }
+          ]
+        },
+        "temperature": 0.3,
+        "maxTokens": 200
+      },
+      "name": "AI Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "position": [1050, 300],
+      "typeVersion": 1,
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const ai = $input.first().json;\nconst market = $('Calculate Indicators').first().json;\n\n// Parse AI response\nconst content = ai.choices?.[0]?.message?.content || ai.content || '';\n\n// Extract action and confidence\nconst actionMatch = content.match(/(BUY|SELL|HOLD)/i);\nconst confidenceMatch = content.match(/confidence[:\\s]*(\\d+\\.?\\d*)/i);\n\nconst action = actionMatch ? actionMatch[1].toUpperCase() : 'HOLD';\nconst confidence = confidenceMatch ? parseFloat(confidenceMatch[1]) : 0.5;\n\nreturn [\n  {\n    json: {\n      symbol: market.symbol,\n      action: action,\n      confidence: confidence,\n      analysis: content,\n      price: market.current_price,\n      indicators: market.indicators,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "position": [1250, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "=🤖 *AI Market Analysis* - {{ $json.symbol }}\n\n{{ $json.analysis }}\n\n*Signal:* {{ $json.action }} ({{ ($json.confidence * 100).toFixed(0) }}% confidence)\n*Price:* ${{ $json.price.toFixed(4) }}\n*RSI:* {{ $json.indicators.rsi.toFixed(2) }}\n\n_GOBOT AI Analysis_",
+        "chatId": "={{ $json.chat_id }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Send to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "position": [1450, 300],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "functionCode": "const result = $input.first().json;\n\n// Forward to GOBOT for execution\nreturn [\n  {\n    json: {\n      url: 'http://localhost:8080/api/signal',\n      method: 'POST',\n      options: {\n        body: result\n      }\n    }\n  }\n];"
+      },
+      "name": "Forward to GOBOT",
+      "type": "n8n-nodes-base.function",
+      "position": [1450, 500],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ $json.symbol }}"
+            },
+            {
+              "name": "action",
+              "value": "={{ $json.action }}"
+            },
+            {
+              "name": "confidence",
+              "value": "={{ $json.confidence }}"
+            },
+            {
+              "name": "analysis",
+              "value": "={{ $json.analysis }}"
+            }
+          ]
+        }
+      },
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1650, 500],
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Request": {
+      "main": [
+        [
+          {
+            "node": "Get Binance Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Binance Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Indicators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Indicators": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send to Telegram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Forward to GOBOT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Forward to GOBOT": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

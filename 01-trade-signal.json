@@ -1,0 +1,121 @@
+{
+  "name": "GOBOT - Trade Signal Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gobot-trade-signal",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [250, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const signal = $input.first().json;\n\nreturn [\n  {\n    json: {\n      symbol: signal.symbol || 'UNKNOWN',\n      action: signal.action || 'hold',\n      confidence: signal.confidence || 0.5,\n      price: signal.price || 0,\n      reason: signal.reason || 'No reason provided',\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "name": "Parse Signal",
+      "type": "n8n-nodes-base.function",
+      "position": [450, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const signal = $input.first().json;\n\n// Validate signal\nconst errors = [];\n\nif (!signal.symbol || signal.symbol.length < 4) {\n  errors.push('Invalid symbol');\n}\n\nif (signal.confidence < 0.6) {\n  errors.push(`Low confidence: ${signal.confidence}`);\n}\n\nif (!['buy', 'sell', 'hold'].includes(signal.action)) {\n  errors.push('Invalid action: must be buy, sell, or hold');\n}\n\nif (errors.length > 0) {\n  throw new Error(`Signal validation failed: ${errors.join(', ')}`);\n}\n\nreturn $input.all();"
+      },
+      "name": "Validate Signal",
+      "type": "n8n-nodes-base.function",
+      "position": [650, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const signal = $input.first().json;\n\n// Format trade message\nlet emoji = '⚖️';\nif (signal.action === 'buy') emoji = '🟢';\nif (signal.action === 'sell') emoji = '🔴';\n\nconst message = `${emoji} *GOBOT Trade Signal*\n\n*Symbol:* ${signal.symbol}\n*Action:* ${signal.action.toUpperCase()}\n*Confidence:* ${(signal.confidence * 100).toFixed(1)}%\n*Price:* $${signal.price.toFixed(4)}\n*Reason:* ${signal.reason}\n*Time:* ${signal.timestamp}\n\n_GOBOT v2.0 Automated Trading_`;\n\nreturn [\n  {\n    json: {\n      chat_id: process.env.TELEGRAM_CHAT_ID,\n      text: message,\n      parse_mode: 'Markdown'\n    }\n  }\n];"
+      },
+      "name": "Format Telegram",
+      "type": "n8n-nodes-base.function",
+      "position": [850, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "={{ $json.text }}",
+        "chatId": "={{ $json.chat_id }}",
+        "additionalFields": {
+          "parse_mode": "={{ $json.parse_mode }}"
+        }
+      },
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "position": [1050, 300],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "functionCode": "const signal = $input.first().json;\n\n// Log to memory/storage\nreturn [\n  {\n    json: {\n      event: 'trade_signal',\n      symbol: signal.symbol,\n      action: signal.action,\n      confidence: signal.confidence,\n      processed_at: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "name": "Log Signal",
+      "type": "n8n-nodes-base.function",
+      "position": [850, 500],
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Signal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Signal": {
+      "main": [
+        [
+          {
+            "node": "Validate Signal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Signal": {
+      "main": [
+        [
+          {
+            "node": "Format Telegram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Signal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Telegram": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

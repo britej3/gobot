@@ -41,10 +41,10 @@ type OllamaRequest struct {
 
 // MSTYRequest represents a request to MSTY API (OpenAI-compatible)
 type MSTYRequest struct {
-	Model    string  `json:"model"`
-	Messages []Message `json:"messages"`
-	Temperature float64 `json:"temperature"`
-	Stream   bool    `json:"stream"`
+	Model       string    `json:"model"`
+	Messages    []Message `json:"messages"`
+	Temperature float64   `json:"temperature"`
+	Stream      bool      `json:"stream"`
 }
 
 type Message struct {
@@ -79,10 +79,10 @@ type MSTYResponse struct {
 // NewOllamaProvider creates a new Ollama provider
 func NewOllamaProvider(config OllamaConfig) (*OllamaProvider, error) {
 	if config.Model == "" {
-		config.Model = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF/LFM2.5-1.2B-Instruct-Q8_0.gguf" // Updated to available msty model
+		config.Model = "qwen3:0.6b" // Updated to available msty model
 	}
 	if config.BaseURL == "" {
-		config.BaseURL = "http://localhost:11454" // Updated to msty port
+		config.BaseURL = "http://localhost:11964" // Updated to msty port with LFM2.5
 	}
 	if config.Timeout == 0 {
 		config.Timeout = 10 * time.Second // Faster timeout for scalping with LFM2.5
@@ -108,9 +108,9 @@ func NewOllamaProvider(config OllamaConfig) (*OllamaProvider, error) {
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"model":     config.Model,
-		"base_url":  config.BaseURL,
-		"timeout":   config.Timeout,
+		"model":    config.Model,
+		"base_url": config.BaseURL,
+		"timeout":  config.Timeout,
 	}).Info("GOBOT LiquidAI LFM2.5 provider initialized")
 
 	return provider, nil
@@ -128,7 +128,7 @@ func (p *OllamaProvider) GenerateResponse(ctx context.Context, prompt string) (s
 			},
 		},
 		Temperature: p.config.Temperature,
-		Stream: false,
+		Stream:      false,
 	}
 
 	jsonData, err := json.Marshal(request)
@@ -144,7 +144,7 @@ func (p *OllamaProvider) GenerateResponse(ctx context.Context, prompt string) (s
 			response = resp
 			break
 		}
-		
+
 		if attempt < p.config.MaxRetries-1 {
 			logrus.WithError(err).WithField("attempt", attempt+1).Debug("Request failed, retrying")
 			time.Sleep(time.Duration(attempt+1) * time.Millisecond * 100)
@@ -161,7 +161,7 @@ func (p *OllamaProvider) GenerateResponse(ctx context.Context, prompt string) (s
 // makeRequest makes a single HTTP request to MSTY (OpenAI-compatible API)
 func (p *OllamaProvider) makeRequest(ctx context.Context, jsonData []byte) (string, error) {
 	startTime := time.Now()
-	
+
 	req, err := http.NewRequestWithContext(ctx, "POST", p.config.BaseURL+"/v1/chat/completions", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -199,8 +199,8 @@ func (p *OllamaProvider) makeRequest(ctx context.Context, jsonData []byte) (stri
 
 	latency := time.Since(startTime)
 	logrus.WithFields(logrus.Fields{
-		"model":    p.config.Model,
-		"latency":  latency,
+		"model":   p.config.Model,
+		"latency": latency,
 	}).Debug("LiquidAI LFM2.5 response generated")
 
 	return response, nil
@@ -210,7 +210,7 @@ func (p *OllamaProvider) makeRequest(ctx context.Context, jsonData []byte) (stri
 func (p *OllamaProvider) GenerateStructuredResponse(ctx context.Context, prompt string, response interface{}) error {
 	// Add JSON instruction to prompt
 	jsonPrompt := prompt + "\n\nRespond in valid JSON format only."
-	
+
 	textResponse, err := p.GenerateResponse(ctx, jsonPrompt)
 	if err != nil {
 		return err
@@ -252,7 +252,7 @@ func (p *OllamaProvider) GetLatency() time.Duration {
 func (p *OllamaProvider) IsHealthy() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	// Simple health check
 	_, err := p.GenerateResponse(ctx, "Hello")
 	return err == nil
@@ -287,7 +287,7 @@ func (p *OllamaProvider) testConnection() error {
 
 	var models struct {
 		Data []struct {
-			ID    string `json:"id"`
+			ID     string `json:"id"`
 			Object string `json:"object"`
 		} `json:"data"`
 		Object string `json:"object"`
@@ -307,12 +307,12 @@ func (p *OllamaProvider) testConnection() error {
 	}
 
 	if !modelFound {
-		return fmt.Errorf("model '%s' not found in MSTY at %s. Available models: %v", 
+		return fmt.Errorf("model '%s' not found in MSTY at %s. Available models: %v",
 			p.config.Model, p.config.BaseURL, models.Data)
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"model": p.config.Model,
+		"model":    p.config.Model,
 		"base_url": p.config.BaseURL,
 	}).Info("GOBOT LiquidAI LFM2.5 connection test successful")
 	return nil
@@ -331,9 +331,9 @@ func (p *OllamaProvider) GetStats() map[string]interface{} {
 // OptimizeForScalping configures the provider for high-frequency trading
 func (p *OllamaProvider) OptimizeForScalping() {
 	// LFM2.5 optimizations for scalping
-	p.config.Temperature = 0.03 // Ultra-low temperature for maximum consistency
+	p.config.Temperature = 0.03        // Ultra-low temperature for maximum consistency
 	p.config.Timeout = 8 * time.Second // Faster timeout for LFM2.5
-	
+
 	logrus.Info("GOBOT LiquidAI LFM2.5 optimized for ultra-fast scalping")
 }
 
@@ -353,7 +353,7 @@ func (p *OllamaProvider) TradingDecisionSchema() string {
 // TradingDecisionPrompt generates a trading decision prompt
 func (p *OllamaProvider) TradingDecisionPrompt(signalData interface{}) string {
 	dataJSON, _ := json.Marshal(signalData)
-	
+
 	return fmt.Sprintf(`
 You are GOBOT's trading decision AI powered by LiquidAI LFM2.5. Evaluate this trading signal for ultra-high-frequency scalping:
 
@@ -362,7 +362,7 @@ Signal Data: %s
 Decision criteria for LFM2.5:
 - FVG confidence > 0.75
 - CVD divergence present and strong
-- Volatility within optimal range (0.5-2.0%)
+- Volatility within optimal range (0.5-2.0%%)
 - No high-impact news events
 - Market microstructure favorable
 
@@ -382,7 +382,7 @@ Respond ultra-fast - this is for millisecond execution with LFM2.5.
 // MarketAnalysisPrompt generates a market analysis prompt
 func (p *OllamaProvider) MarketAnalysisPrompt(marketData interface{}) string {
 	dataJSON, _ := json.Marshal(marketData)
-	
+
 	return fmt.Sprintf(`
 You are GOBOT's market analysis AI powered by LiquidAI LFM2.5. Analyze the following market data with millisecond precision:
 

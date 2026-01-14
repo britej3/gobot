@@ -1,0 +1,145 @@
+{
+  "name": "GOBOT - QuantCrawler AI Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "quantcrawler-analysis",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [250, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $input.first().json;\n\n// Parse request body\nconst body = typeof data.body === 'string' ? JSON.parse(data.body) : data.body;\n\nreturn [{\n  json: {\n    symbol: body.symbol || 'UNKNOWN',\n    account_balance: parseFloat(body.account_balance) || 1000,\n    account_equity: parseFloat(body.account_equity) || 1000,\n    current_price: parseFloat(body.current_price) || 0,\n    request_id: body.request_id || `req_${Date.now()}`,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Parse Request",
+      "type": "n8n-nodes-base.function",
+      "position": [450, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3456/webhook",
+        "sendHeaders": true,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "QuantCrawler Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [650, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $input.first().json;\n\n// Validate response\nconst errors = [];\n\nif (!data.direction) {\n  errors.push('Missing direction');\n}\n\nif (!data.confidence || data.confidence < 0 || data.confidence > 100) {\n  errors.push('Invalid confidence score');\n}\n\nif (errors.length > 0) {\n  throw new Error(`QuantCrawler validation failed: ${errors.join(', ')}`);\n}\n\n// Calculate recommended position size\nconst accountBalance = data.account_balance || data.account_balance;\nconst recommendedOption = data.options?.find(o => o.recommended) || data.options?.[0] || {\n  name: 'Default',\n  contracts: 1,\n  risk_per_contract: 100,\n  total_risk: 100,\n  stop_price: data.entry * 0.995,\n  target_price: data.entry * 1.015,\n  risk_reward_ratio: 1.5,\n  recommended: true\n};\n\nconst riskPercent = (recommendedOption.total_risk / accountBalance) * 100;\n\nreturn [{\n  json: {\n    ...data,\n    recommended_option: recommendedOption,\n    risk_percent: riskPercent.toFixed(2),\n    validated: true\n  }\n}];"
+      },
+      "name": "Validate Response",
+      "type": "n8n-nodes-base.function",
+      "position": [850, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $input.first().json;\n\n// Format for Go bot\nconst formatted = {\n  symbol: data.symbol,\n  ticker: data.ticker,\n  current_price: data.current_price,\n  entry: data.entry,\n  confidence: data.confidence,\n  direction: data.direction,\n  recommendation: data.recommendation,\n  options: (data.options || []).map((opt, i) => ({\n    name: opt.name || `Option ${i+1}`,\n    contracts: opt.contracts || 1,\n    risk_per_contract: opt.risk_per_contract || 100,\n    stop_price: opt.stop_price,\n    target_price: opt.target_price,\n    risk_reward_ratio: opt.risk_reward_ratio || 1.5,\n    recommended: opt.recommended || false\n  })),\n  timeframes: data.timeframes || {},\n  key_levels: data.key_levels || { support: 0, resistance: 0 },\n  risks: data.risks || '',\n  confluence: data.confluence || 'Unknown',\n  request_id: data.request_id,\n  processed_at: data.processed_at\n};\n\nreturn [{ json: formatted }];"
+      },
+      "name": "Format Response",
+      "type": "n8n-nodes-base.function",
+      "position": [1050, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $input.first().json;\n\n// Log to file for debugging\nconst logEntry = {\n  timestamp: new Date().toISOString(),\n  symbol: data.symbol,\n  direction: data.direction,\n  confidence: data.confidence,\n  entry: data.entry,\n  stop: data.options?.find(o => o.recommended)?.stop_price || data.options?.[0]?.stop_price,\n  target: data.options?.find(o => o.recommended)?.target_price || data.options?.[0]?.target_price\n};\n\nconsole.log('[N8N] Trade analysis:', JSON.stringify(logEntry, null, 2));\n\nreturn [{\n  json: {\n    ...data,\n    logged: true,\n    log_entry: logEntry\n  }\n}];"
+      },
+      "name": "Log Result",
+      "type": "n8n-nodes-base.function",
+      "position": [1250, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $input.first().json;\n\n// Decide whether to send trade signal\nconst shouldTrade = data.direction !== 'STAY AWAY' && data.confidence >= 50;\n\nif (!shouldTrade) {\n  return [{\n    json: {\n      action: 'hold',\n      symbol: data.symbol,\n      reason: data.direction === 'STAY AWAY' ? 'AI recommends STAY AWAY' : `Low confidence: ${data.confidence}%`,\n      confidence: 0,\n      source: 'quantcrawler'\n    }\n  }];\n}\n\n// Send trade signal to Go bot\nconst recommended = data.options?.find(o => o.recommended) || data.options?.[0];\nreturn [{\n  json: {\n    url: 'http://localhost:8080/webhook/trade_signal',\n    method: 'POST',\n    body: {\n      symbol: data.symbol,\n      action: data.direction.toLowerCase(),\n      confidence: data.confidence / 100,\n      entry_price: data.entry,\n      stop_loss: recommended?.stop_price,\n      take_profit: recommended?.target_price,\n      risk_reward: recommended?.risk_reward_ratio || 1.5,\n      recommendation: data.recommendation,\n      source: 'quantcrawler',\n      request_id: data.request_id\n    }\n  }\n}];"
+      },
+      "name": "Prepare Trade Signal",
+      "type": "n8n-nodes-base.function",
+      "position": [1450, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Send to Go Bot",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1650, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $input.first().json;\n\n// Return final response\nreturn [{\n  json: {\n    success: true,\n    symbol: data.symbol || $input.first().json.symbol,\n    direction: data.direction || $input.first().json.direction,\n    confidence: data.confidence || $input.first().json.confidence,\n    message: 'Analysis completed successfully',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Response",
+      "type": "n8n-nodes-base.function",
+      "position": [1850, 300],
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{"node": "Parse Request", "type": "main", "index": 0}]
+      ]
+    },
+    "Parse Request": {
+      "main": [
+        [{"node": "QuantCrawler Analysis", "type": "main", "index": 0}]
+      ]
+    },
+    "QuantCrawler Analysis": {
+      "main": [
+        [{"node": "Validate Response", "type": "main", "index": 0}]
+      ]
+    },
+    "Validate Response": {
+      "main": [
+        [{"node": "Format Response", "type": "main", "index": 0}]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [{"node": "Log Result", "type": "main", "index": 0}]
+      ]
+    },
+    "Log Result": {
+      "main": [
+        [{"node": "Prepare Trade Signal", "type": "main", "index": 0}]
+      ]
+    },
+    "Prepare Trade Signal": {
+      "main": [
+        [{"node": "Send to Go Bot", "type": "main", "index": 0}]
+      ]
+    },
+    "Send to Go Bot": {
+      "main": [
+        [{"node": "Response", "type": "main", "index": 0}]
+      ]
+    }
+  }
+}

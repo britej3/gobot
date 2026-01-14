@@ -1,0 +1,22 @@
+{
+  "name": "gobot-quantcrawler",
+  "version": "1.0.0",
+  "description": "QuantCrawler Puppeteer automation for GOBOT trading bot",
+  "main": "n8n/scripts/quantcrawler.js",
+  "scripts": {
+    "start": "node n8n/scripts/quantcrawler.js --webhook",
+    "test": "node n8n/scripts/quantcrawler.js 1000PEPEUSDT",
+    "setup": "npm install puppeteer"
+  },
+  "keywords": [
+    "trading",
+    "puppeteer",
+    "quantcrawler",
+    "gobot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^21.0.0"
+  }
+}

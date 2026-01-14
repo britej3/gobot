@@ -120,11 +120,28 @@ func (p *Platform) Stop(ctx context.Context) error {
 func (p *Platform) initBinanceClient() error {
 	logrus.Info("🔗 Initializing Binance client...")
 	
-	p.client = futures.NewClient(p.config.Binance.APIKey, p.config.Binance.APISecret)
+	// Use testnet credentials if testnet mode is enabled
+	apiKey := p.config.Binance.APIKey
+	apiSecret := p.config.Binance.APISecret
 	
 	if p.config.Binance.Testnet {
+		// Override with testnet credentials from environment
+		testnetKey := os.Getenv("BINANCE_TESTNET_API")
+		testnetSecret := os.Getenv("BINANCE_TESTNET_SECRET")
+		
+		if testnetKey != "" && testnetSecret != "" {
+			apiKey = testnetKey
+			apiSecret = testnetSecret
+			logrus.Info("🧪 Using Binance testnet credentials")
+		} else {
+			logrus.Warn("⚠️  Testnet enabled but BINANCE_TESTNET_API/SECRET not set, using mainnet keys")
+		}
+		
+		p.client = futures.NewClient(apiKey, apiSecret)
 		p.client.BaseURL = "https://testnet.binancefuture.com"
-		logrus.Info("🧪 Using Binance testnet")
+		logrus.Info("🧪 Using Binance testnet URL")
+	} else {
+		p.client = futures.NewClient(apiKey, apiSecret)
 	}
 	
 	// Test connection

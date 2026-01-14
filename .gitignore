@@ -78,3 +78,8 @@ agents.md/
 # Runtime generated files
 *_report_*.json
 *_session_*.json
+
+# QuantCrawler sessions
+n8n-sessions/
+chromium/
+puppeteer/

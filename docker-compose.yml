@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # N8N Workflow Automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: gobot-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=gobot
+      - N8N_BASIC_AUTH_PASSWORD=secure_password
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=UTC
+      - TZ=UTC
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-sessions:/home/node/.config/google-chrome
+      - ./n8n/workflows:/ workflows
+    networks:
+      - gobot-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # QuantCrawler Puppeteer Server
+  quantcrawler:
+    image: node:20-alpine
+    container_name: gobot-quantcrawler
+    restart: unless-stopped
+    ports:
+      - "3456:3456"
+    working_dir: /app
+    environment:
+      - QUANTCRAWLER_EMAIL=${QUANTCRAWLER_EMAIL}
+      - QUANTCRAWLER_PASSWORD=${QUANTCRAWLER_PASSWORD}
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+    volumes:
+      - ./n8n-sessions:/app/n8n-sessions
+      - ./n8n/scripts/quantcrawler.js:/app/quantcrawler.js
+    command: node quantcrawler.js --webhook
+    networks:
+      - gobot-network
+    depends_on:
+      - n8n
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3456/webhook"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Chrome for Puppeteer (if using separate browser container)
+  chrome:
+    image: browserless/chrome:latest
+    container_name: gobot-chrome
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - MAX_CONCURRENT_SESSIONS=1
+      - CONNECTION_TIMEOUT=30000
+    networks:
+      - gobot-network
+
+networks:
+  gobot-network:
+    driver: bridge
+
+volumes:
+  n8n_data:
+    driver: local

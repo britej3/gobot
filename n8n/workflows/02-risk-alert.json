@@ -1,0 +1,171 @@
+{
+  "name": "GOBOT - Risk Alert Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gobot-risk-alert",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [250, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const alert = $input.first().json;\n\nreturn [\n  {\n    json: {\n      position: alert.position || alert.symbol || 'UNKNOWN',\n      pnl_percent: alert.pnl_percent || 0,\n      pnl_value: alert.pnl_value || 0,\n      health_score: alert.health_score || 50,\n      reason: alert.reason || 'Unknown',\n      action: alert.action || 'monitor',\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "name": "Parse Alert",
+      "type": "n8n-nodes-base.function",
+      "position": [450, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const alert = $input.first().json;\n\n// Determine alert severity\nlet severity = 'info';\nlet emoji = 'ℹ️';\n\nif (alert.pnl_percent <= -10) {\n  severity = 'critical';\n  emoji = '🚨🚨🚨';\n} else if (alert.pnl_percent <= -5) {\n  severity = 'error';\n  emoji = '🔴';\n} else if (alert.pnl_percent <= -2) {\n  severity = 'warning';\n  emoji = '⚠️';\n} else if (alert.health_score < 40) {\n  severity = 'warning';\n  emoji = '⚠️';\n}\n\n// Format message\nlet actionText = '';\nif (alert.action === 'close') actionText = '\\n\\n*Action Required:* Close position immediately!';\nif (alert.action === 'reduce') actionText = '\\n\\n*Action Required:* Reduce position size!';\nif (alert.action === 'watch') actionText = '\\n\\n*Action:* Monitor closely';\n\nconst message = `${emoji} *GOBOT Risk Alert* (${severity.toUpperCase()})\n\n*Position:* ${alert.position}\n*PnL:* ${alert.pnl_percent > 0 ? '+' : ''}${alert.pnl_percent.toFixed(2)}% ($${alert.pnl_value.toFixed(2)})\n*Health Score:* ${alert.health_score}/100\n*Reason:* ${alert.reason}${actionText}\n*Time:* ${alert.timestamp}\n\n_GOBOT Risk Management_`;\n\nreturn [\n  {\n    json: {\n      chat_id: process.env.TELEGRAM_CHAT_ID,\n      text: message,\n      parse_mode: 'Markdown'\n    }\n  }\n];"
+      },
+      "name": "Format Alert",
+      "type": "n8n-nodes-base.function",
+      "position": [650, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "={{ $json.text }}",
+        "chatId": "={{ $json.chat_id }}",
+        "additionalFields": {
+          "parse_mode": "={{ $json.parse_mode }}"
+        }
+      },
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "position": [850, 300],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value": "={{ $json.severity }}",
+              "operation": "equal",
+              "value": "critical"
+            }
+          ]
+        }
+      },
+      "name": "Check Critical",
+      "type": "n8n-nodes-base.if",
+      "position": [650, 500],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const alert = $input.first().json;\n\n// Emergency stop logic\nreturn [\n  {\n    json: {\n      action: 'emergency_stop',\n      symbol: alert.position,\n      reason: 'Critical loss threshold reached',\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "name": "Emergency Stop",
+      "type": "n8n-nodes-base.function",
+      "position": [850, 500],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "=🚨 *EMERGENCY STOP TRIGGERED* 🚨\n\nPosition: {{ $json.symbol }}\nReason: {{ $json.reason }}\n\nAll positions being reviewed for safety.",
+        "chatId": "={{ $json.chat_id }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Emergency Alert",
+      "type": "n8n-nodes-base.telegram",
+      "position": [1050, 500],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "functionCode": "const alert = $input.first().json;\n\n// Log alert\nreturn [\n  {\n    json: {\n      event: 'risk_alert',\n      position: alert.position,\n      pnl_percent: alert.pnl_percent,\n      health_score: alert.health_score,\n      severity: alert.severity,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "name": "Log Alert",
+      "type": "n8n-nodes-base.function",
+      "position": [850, 700],
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Alert": {
+      "main": [
+        [
+          {
+            "node": "Format Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Critical",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Critical": {
+      "main": [
+        [
+          {
+            "node": "Emergency Stop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emergency Stop": {
+      "main": [
+        [
+          {
+            "node": "Emergency Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
