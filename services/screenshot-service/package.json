@@ -1,7 +1,7 @@
 {
   "name": "tradingview-screenshot-service",
   "version": "1.0.0",
-  "description": "Microservice for capturing TradingView chart screenshots",
+  "description": "Microservice for capturing TradingView chart screenshots using Puppeteer",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -15,7 +15,8 @@
     "tradingview",
     "screenshot",
     "puppeteer",
-    "trading"
+    "trading",
+    "charts"
   ],
   "author": "",
   "license": "MIT"

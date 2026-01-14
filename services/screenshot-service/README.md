@@ -4,18 +4,16 @@ Microservice for capturing TradingView chart screenshots using Puppeteer.
 
 ## Features
 
-- Express.js server on localhost:3456
+- Express.js server on localhost:3000
 - Single screenshot capture (`POST /capture`)
 - Multiple timeframe capture (`POST /capture-multi`)
 - Automatic browser management
 - Error handling and logging
-- Health check endpoint
 
 ## Requirements
 
 - Node.js 18+
 - npm or yarn
-- Chromium (installed by Puppeteer)
 
 ## Installation
 
@@ -68,7 +66,7 @@ Capture a single TradingView chart screenshot.
   "symbol": "BTCUSDT",
   "interval": "1m",
   "timeframe": "1m",
-  "screenshot": "base64_encoded_image...",
+  "screenshot": "iVBORw0KGgoAAAANSUhEUgAAB...",
   "timestamp": "2026-01-14T10:30:00.000Z",
   "duration_ms": 5420
 }
@@ -113,8 +111,22 @@ Health check endpoint.
 ```json
 {
   "status": "healthy",
-  "timestamp": "2026-01-14T10:30:00.000Z",
-  "browser": "ready"
+  "service": "tradingview-screenshots",
+  "timestamp": "2026-01-14T10:30:00.000Z"
+}
+```
+
+---
+
+### GET /browser/status
+
+Browser status.
+
+**Response:**
+```json
+{
+  "status": "ready",
+  "browser": "running"
 }
 ```
 
@@ -129,7 +141,7 @@ Restart the browser instance (useful if hung).
 ### Single Screenshot
 
 ```bash
-curl -X POST http://localhost:3456/capture \
+curl -X POST http://localhost:3000/capture \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSDT","interval":"1m"}'
 ```
@@ -137,7 +149,7 @@ curl -X POST http://localhost:3456/capture \
 ### Multiple Timeframes
 
 ```bash
-curl -X POST http://localhost:3456/capture-multi \
+curl -X POST http://localhost:3000/capture-multi \
   -H "Content-Type: application/json" \
   -d '{"symbol":"1000PEPEUSDT","intervals":["1m","5m","15m"]}'
 ```
@@ -145,13 +157,13 @@ curl -X POST http://localhost:3456/capture-multi \
 ### Health Check
 
 ```bash
-curl http://localhost:3456/health
+curl http://localhost:3000/health
 ```
 
 ### Save Screenshot to File
 
 ```bash
-curl -s -X POST http://localhost:3456/capture \
+curl -s -X POST http://localhost:3000/capture \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSDT","interval":"1m"}' | \
   jq -r '.screenshot' | \
@@ -163,7 +175,7 @@ curl -s -X POST http://localhost:3456/capture \
 Use the **HTTP Request** node in N8N:
 
 1. Method: `POST`
-2. URL: `http://localhost:3456/capture`
+2. URL: `http://localhost:3000/capture`
 3. Body (JSON):
    ```json
    {
@@ -172,6 +184,15 @@ Use the **HTTP Request** node in N8N:
    }
    ```
 4. Extract image from `{{ $json.screenshot }}`
+
+## Project Structure
+
+```
+services/screenshot-service/
+├── package.json
+├── server.js
+└── README.md
+```
 
 ## Troubleshooting
 
@@ -195,16 +216,7 @@ The browser needs ~500MB disk space. Ensure you have enough disk space.
 
 Change the port in `server.js`:
 ```javascript
-const PORT = 3457;  // Change this
-```
-
-## Project Structure
-
-```
-screenshot-service/
-├── package.json
-├── server.js
-└── README.md
+const PORT = 3001;  // Change this
 ```
 
 ## License

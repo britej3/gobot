@@ -1,0 +1,139 @@
+{
+  "name": "GOBOT - TradingView Screenshots for QuantCrawler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tradingview-screenshots",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "position": [250, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const body = typeof $input.first().json.body === 'string' \n  ? JSON.parse($input.first().json.body) \n  : $input.first().json.body;\n\nreturn [{\n  json: {\n    symbol: body.symbol || 'BTCUSDT',\n    intervals: body.intervals || ['1m', '5m', '15m'],\n    account_balance: body.account_balance || 1000,\n    current_price: body.current_price || 0,\n    request_id: body.request_id || `req_${Date.now()}`,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Parse Request",
+      "type": "n8n-nodes-base.function",
+      "position": [450, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/capture-multi",
+        "sendHeaders": true,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ symbol: $json.symbol, intervals: $json.intervals }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Capture Screenshots",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [650, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $input.first().json;\nconst results = data.results || {};\n\n// Format screenshots for QuantCrawler\nconst screenshots = {\n  '1m': results['1m'] || null,\n  '5m': results['5m'] || null,\n  '15m': results['15m'] || null\n};\n\n// Check if all screenshots captured\nconst capturedCount = Object.values(screenshots).filter(s => s).length;\nconst allCaptured = capturedCount === 3;\n\nreturn [{\n  json: {\n    ...data,\n    screenshots,\n    captured_count: capturedCount,\n    all_captured: allCaptured,\n    formatted_at: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Format Screenshots",
+      "type": "n8n-nodes-base.function",
+      "position": [850, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3456/webhook",
+        "sendHeaders": true,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  symbol: $json.symbol,\n  account_balance: $json.account_balance,\n  current_price: $json.current_price,\n  screenshots: $json.screenshots,\n  request_id: $json.request_id\n}) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "Send to QuantCrawler",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1050, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $input.first().json;\n\n// Format response for Go Bot\nconst response = {\n  symbol: data.symbol || $json.symbol,\n  ticker: (data.symbol || $json.symbol).replace('USDT', '').replace('PERP', ''),\n  current_price: data.current_price || $json.current_price || 0,\n  entry: data.entry || data.current_price || $json.current_price || 0,\n  confidence: data.confidence || 0,\n  direction: data.direction || 'STAY AWAY',\n  recommendation: data.recommendation || 'Analysis pending',\n  options: data.options || [{\n    name: 'Standard Position',\n    contracts: 1,\n    risk_per_contract: 100,\n    stop_price: (data.current_price || $json.current_price || 0) * 0.995,\n    target_price: (data.current_price || $json.current_price || 0) * 1.015,\n    risk_reward_ratio: 1.5,\n    recommended: true\n  }],\n  timeframes: data.timeframes || {\n    '15m': 'Waiting for analysis',\n    '5m': 'Waiting for analysis',\n    '1m': 'Waiting for analysis'\n  },\n  key_levels: data.key_levels || { support: 0, resistance: 0 },\n  confluence: data.confluence || '0/3 timeframes agree',\n  request_id: data.request_id || $json.request_id,\n  processed_at: new Date().toISOString(),\n  source: 'tradingview-screenshots'\n};\n\nreturn [{ json: response }];"
+      },
+      "name": "Format Response",
+      "type": "n8n-nodes-base.function",
+      "position": [1250, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/trade-signal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  symbol: $json.symbol,\n  action: $json.direction === 'STAY AWAY' ? 'hold' : $json.direction.toLowerCase(),\n  confidence: ($json.confidence || 0) / 100,\n  entry_price: $json.entry,\n  stop_loss: $json.options?.find(o => o.recommended)?.stop_price,\n  take_profit: $json.options?.find(o => o.recommended)?.target_price,\n  risk_reward: $json.options?.find(o => o.recommended)?.risk_reward_ratio || 1.5,\n  recommendation: $json.recommendation,\n  source: 'tradingview-screenshots',\n  request_id: $json.request_id\n}) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Send to Go Bot",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1450, 300],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $input.first().json;\n\n// Log the result\nconsole.log('═══════════════════════════════════════');\nconsole.log('  TradingView Screenshot Workflow');\nconsole.log('═══════════════════════════════════════');\nconsole.log('Symbol:', data.symbol);\nconsole.log('Direction:', data.direction);\nconsole.log('Confidence:', data.confidence + '%');\nconsole.log('Entry:', data.entry);\nconsole.log('Stop:', data.options?.find(o => o.recommended)?.stop_price);\nconsole.log('Target:', data.options?.find(o => o.recommended)?.target_price);\nconsole.log('═══════════════════════════════════════');\n\nreturn [{\n  json: {\n    success: true,\n    symbol: data.symbol,\n    direction: data.direction,\n    confidence: data.confidence,\n    message: 'Screenshots captured and analyzed',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Log Result",
+      "type": "n8n-nodes-base.function",
+      "position": [1650, 300],
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [{ "node": "Parse Request", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Request": {
+      "main": [
+        [{ "node": "Capture Screenshots", "type": "main", "index": 0 }]
+      ]
+    },
+    "Capture Screenshots": {
+      "main": [
+        [{ "node": "Format Screenshots", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Screenshots": {
+      "main": [
+        [{ "node": "Send to QuantCrawler", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send to QuantCrawler": {
+      "main": [
+        [{ "node": "Format Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [{ "node": "Send to Go Bot", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send to Go Bot": {
+      "main": [
+        [{ "node": "Log Result", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

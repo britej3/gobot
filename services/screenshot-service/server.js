@@ -1,10 +1,8 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
-const path = require('path');
-const fs = require('fs');
 
 const app = express();
-const PORT = 3456;
+const PORT = 3000;
 
 // Middleware
 app.use(express.json());
@@ -16,7 +14,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Store browser instance
+// Browser instance
 let browser = null;
 
 // Initialize browser
@@ -57,80 +55,16 @@ async function cleanup() {
 process.on('SIGTERM', cleanup);
 process.on('SIGINT', cleanup);
 
-// TradingView URL builder
-function buildTradingViewURL(symbol, interval) {
-  const intervalMap = {
-    '1m': '1',
-    '3m': '3',
-    '5m': '5',
-    '15m': '15',
-    '30m': '30',
-    '1h': '60',
-    '2h': '120',
-    '4h': '240',
-    '1d': 'D',
-    '1w': 'W',
-    '1M': 'M',
-  };
-  
-  const tvInterval = intervalMap[interval] || interval;
-  const tvSymbol = symbol.replace('PERP', '').toLowerCase();
-  
-  // Binance futures URL
-  return `https://www.tradingview.com/chart/?symbol=BINANCE:${tvSymbol}`;
-}
-
-// Capture screenshot
-async function captureChart(symbol, interval) {
-  const browser = await initBrowser();
-  const page = await browser.newPage();
-  
-  // Set viewport
-  await page.setViewport({ width: 1920, height: 1080 });
-  
-  const url = buildTradingViewURL(symbol, interval);
-  console.log(`[Screenshot] Loading: ${url}`);
-  
-  // Navigate to TradingView
-  await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-  
-  // Wait for chart to load
-  try {
-    await page.waitForSelector('.chart-container', { timeout: 15000 });
-  } catch (e) {
-    console.log('[Screenshot] Warning: Chart container not found, waiting for DOM...');
-    await page.waitForSelector('body', { timeout: 5000 });
-  }
-  
-  // Wait for chart to render (additional time for indicators to load)
-  await new Promise(r => setTimeout(r, 3000));
-  
-  // Take screenshot of the chart area
-  const screenshotBuffer = await page.screenshot({
-    type: 'png',
-    fullPage: false,
-    clip: { x: 0, y: 0, width: 1920, height: 800 },
-  });
-  
-  // Close page
-  await page.close();
-  
-  // Convert to base64
-  const base64 = screenshotBuffer.toString('base64');
-  
-  return base64;
-}
-
-// Health check endpoint
+// Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
+    service: 'tradingview-screenshots',
     timestamp: new Date().toISOString(),
-    browser: browser ? 'ready' : 'initializing',
   });
 });
 
-// Main capture endpoint
+// Capture screenshot
 app.post('/capture', async (req, res) => {
   const startTime = Date.now();
   
@@ -155,8 +89,47 @@ app.post('/capture', async (req, res) => {
     
     console.log(`[Screenshot] Capturing ${symbol} ${interval}...`);
     
-    // Capture chart
-    const base64Image = await captureChart(symbol, interval);
+    // Get browser
+    const br = await initBrowser();
+    const page = await br.newPage();
+    
+    // Set viewport
+    await page.setViewport({ width: 1920, height: 1080 });
+    
+    // Map interval to TradingView format
+    const intervalMap = {
+      '1m': '1', '3m': '3', '5m': '5', '15m': '15', '30m': '30',
+      '1h': '60', '2h': '120', '4h': '240', '1d': 'D', '1w': 'W', '1M': 'M'
+    };
+    const tvInterval = intervalMap[interval];
+    const tvSymbol = symbol.replace('PERP', '').replace('USDT', '').toUpperCase();
+    
+    // Build TradingView URL
+    const url = `https://www.tradingview.com/chart/?symbol=BINANCE:${tvSymbol}&interval=${tvInterval}`;
+    
+    console.log(`  Loading: ${url}`);
+    
+    // Navigate to TradingView
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+    
+    // Wait for chart to load
+    await page.waitForSelector('body', { timeout: 10000 });
+    
+    // Wait for chart to render
+    await new Promise(r => setTimeout(r, 3000));
+    
+    // Take screenshot of the chart area
+    const screenshotBuffer = await page.screenshot({
+      type: 'png',
+      fullPage: false,
+      clip: { x: 0, y: 60, width: 1920, height: 800 },
+    });
+    
+    // Close page
+    await page.close();
+    
+    // Convert to base64
+    const base64 = screenshotBuffer.toString('base64');
     
     const duration = Date.now() - startTime;
     
@@ -167,7 +140,7 @@ app.post('/capture', async (req, res) => {
       symbol,
       interval,
       timeframe: interval,
-      screenshot: base64Image,
+      screenshot: base64,
       timestamp: new Date().toISOString(),
       duration_ms: duration,
     });
@@ -182,7 +155,7 @@ app.post('/capture', async (req, res) => {
   }
 });
 
-// Capture multiple timeframes at once
+// Capture multiple timeframes
 app.post('/capture-multi', async (req, res) => {
   const startTime = Date.now();
   
@@ -201,10 +174,32 @@ app.post('/capture-multi', async (req, res) => {
     
     for (const interval of intervals) {
       try {
-        const base64Image = await captureChart(symbol, interval);
-        results[interval] = base64Image;
+        const br = await initBrowser();
+        const page = await br.newPage();
+        await page.setViewport({ width: 1920, height: 1080 });
+        
+        const intervalMap = {
+          '1m': '1', '3m': '3', '5m': '5', '15m': '15', '30m': '30',
+          '1h': '60', '2h': '120', '4h': '240', '1d': 'D', '1w': 'W', '1M': 'M'
+        };
+        const tvInterval = intervalMap[interval];
+        const tvSymbol = symbol.replace('PERP', '').replace('USDT', '').toUpperCase();
+        
+        const url = `https://www.tradingview.com/chart/?symbol=BINANCE:${tvSymbol}&interval=${tvInterval}`;
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+        await page.waitForSelector('body', { timeout: 10000 });
+        await new Promise(r => setTimeout(r, 3000));
+        
+        const buffer = await page.screenshot({
+          type: 'png',
+          fullPage: false,
+          clip: { x: 0, y: 60, width: 1920, height: 800 },
+        });
+        
+        await page.close();
+        results[interval] = buffer.toString('base64');
       } catch (err) {
-        console.error(`[Screenshot] Failed to capture ${interval}: ${err.message}`);
+        console.error(`  Failed ${interval}: ${err.message}`);
         results[interval] = null;
       }
     }
@@ -264,7 +259,7 @@ app.post('/browser/restart', async (req, res) => {
   }
 });
 
-// Error handling middleware
+// Error handler
 app.use((err, req, res, next) => {
   console.error(`[Error] ${err.message}`);
   res.status(500).json({
@@ -277,7 +272,7 @@ app.use((err, req, res, next) => {
 app.use((req, res) => {
   res.status(404).json({
     error: 'Not found',
-    available: ['POST /capture', 'POST /capture-multi', 'GET /health'],
+    available: ['POST /capture', 'POST /capture-multi', 'GET /health', 'GET /browser/status'],
   });
 });
 
@@ -288,9 +283,11 @@ app.listen(PORT, async () => {
   console.log('==============================================');
   console.log(`  Server:      http://localhost:${PORT}`);
   console.log(`  Endpoints:`);
-  console.log(`    POST /capture       - Single screenshot`);
-  console.log(`    POST /capture-multi - Multiple timeframes`);
-  console.log(`    GET  /health        - Health check`);
+  console.log(`    POST /capture        - Capture single timeframe`);
+  console.log(`    POST /capture-multi  - Capture multiple timeframes`);
+  console.log(`    GET  /health         - Health check`);
+  console.log(`    GET  /browser/status - Browser status`);
+  console.log(`    POST /browser/restart - Restart browser`);
   console.log('');
   console.log(`  Example:`);
   console.log(`    curl -X POST http://localhost:${PORT}/capture \\`);
@@ -298,6 +295,6 @@ app.listen(PORT, async () => {
   console.log(`      -d '{"symbol":"BTCUSDT","interval":"1m"}'`);
   console.log('==============================================');
   
-  // Initialize browser on startup
+  // Initialize browser
   await initBrowser();
 });
