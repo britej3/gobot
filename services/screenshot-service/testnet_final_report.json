@@ -1,0 +1,52 @@
+{
+  "test_name": "GOBOT 60-Minute Testnet",
+  "completed_at": "2026-01-15T20:12:23.533Z",
+  "configuration": {
+    "total_duration_minutes": 60,
+    "observation_cycle_minutes": 15,
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "XRPUSDT"
+    ],
+    "initial_balance": 100
+  },
+  "ai_providers": {
+    "openrouter": {
+      "primary": "meta-llama/llama-3.3-70b-instruct:free",
+      "fallbacks": [
+        "deepseek/deepseek-r1-0528:free",
+        "google/gemini-2.0-flash-exp:free"
+      ]
+    },
+    "groq": {
+      "primary": "llama-3.3-70b-versatile"
+    },
+    "google": {
+      "primary": "gemini-2.5-flash"
+    }
+  },
+  "risk_parameters": {
+    "confidence_threshold": 0.75,
+    "position_sizing_percent": 10,
+    "stop_loss_percent": 2,
+    "take_profit_percent": 4,
+    "rate_limit_per_hour": 20
+  },
+  "results": {
+    "cycles_completed": 4,
+    "ai_provider_success_rate": "100%",
+    "consistent_signals": true,
+    "market_sentiment": "BULLISH"
+  },
+  "production_readiness": {
+    "ai_analysis": true,
+    "anti_detection": true,
+    "risk_management": true,
+    "state_persistence": true,
+    "chart_capture": true,
+    "signal_generation": true,
+    "live_trading": false,
+    "alerts": false
+  }
+}

@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 
 /**
- * Complete TradingView + QuantCrawler Integration
+ * GOBOT Automated Trading - Agent-Browser + AI Integration
  * 
- * This script runs the full automation:
- * 1. GOBOT detects trading opportunity
- * 2. Capture TradingView charts (1m, 5m, 15m)
- * 3. Send to QuantCrawler for analysis
- * 4. Extract trade signal
- * 5. Return structured output
+ * Full automation pipeline:
+ * 1. agent-browser captures TradingView charts (1m, 5m, 15m)
+ * 2. GPT-4o Vision for AI analysis (or fallback)
+ * 3. Extract structured trade signal
+ * 4. Send to GOBOT webhook
  * 
  * Usage: node auto-trade.js <symbol> [balance]
  * Example: node auto-trade.js 1000PEPEUSDT 10000
@@ -16,49 +15,64 @@
 
 const http = require('http');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
 
-// Configuration
+const envPath = path.join(__dirname, '..', '..', '.env');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+      const [key, ...vals] = trimmed.split('=');
+      if (key && vals.join('=').trim()) {
+        process.env[key.trim()] = vals.join('=').trim();
+      }
+    }
+  });
+}
+
+const aiAnalyzer = require('./ai-analyzer.js');
+
 const CONFIG = {
-  // Testnet vs Mainnet mode
-  useTestnet: process.env.BINANCE_USE_TESTNET === 'true' || process.env.TESTNET === 'true',
-  
-  // Service endpoints
+  useTestnet: process.env.BINANCE_USE_TESTNET === 'false' ? false : true,
   screenshotService: 'http://localhost:3456',
-  quantCrawler: 'http://localhost:3456/webhook',
   gobotWebhook: 'http://localhost:8080/webhook/trade_signal',
-  n8nWebhook: 'http://localhost:5678/webhook/tradingview-analysis',
   
-  // Binance endpoints (auto-selected based on useTestnet)
+  telegramToken: process.env.TELEGRAM_TOKEN || '',
+  telegramChatId: process.env.AUTHORIZED_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '',
+  telegramEnabled: (process.env.TELEGRAM_NOTIFICATIONS === 'true' || process.env.TELEGRAM_TOKEN) && process.env.TELEGRAM_TOKEN,
+  
   getBinanceBaseURL() {
     return this.useTestnet 
       ? 'https://testnet.binancefuture.com' 
       : 'https://fapi.binance.com';
   },
   
-  timeout: 120000, // 2 minutes
+  timeout: 120000,
 };
 
-// Colors for output
-const colors = {
+const C = {
   reset: '\x1b[0m',
   green: '\x1b[32m',
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
   red: '\x1b[31m',
+  cyan: '\x1b[36m',
 };
 
-function log(message, color = 'reset') {
-  console.log(`${colors[color]}${message}${colors.reset}`);
+function log(msg, color = 'reset') {
+  console.log(`${C[color]}${msg}${C.reset}`);
 }
 
 function logSection(title) {
   console.log('');
-  log('═══════════════════════════════════════════════════', 'blue');
+  log('═══════════════════════════════════════════════════════════════', 'blue');
   log(`  ${title}`, 'blue');
-  log('═══════════════════════════════════════════════════', 'blue');
+  log('═══════════════════════════════════════════════════════════════', 'blue');
 }
 
-// HTTP helper
 function httpRequest(url, method = 'GET', data = null) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
@@ -69,9 +83,7 @@ function httpRequest(url, method = 'GET', data = null) {
       port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
       path: parsed.pathname + parsed.search,
       method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       timeout: CONFIG.timeout,
     };
 
@@ -88,287 +100,277 @@ function httpRequest(url, method = 'GET', data = null) {
     });
 
     req.on('error', reject);
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Request timeout'));
-    });
-
-    if (data) {
-      req.write(JSON.stringify(data));
-    }
-
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
+    if (data) req.write(JSON.stringify(data));
     req.end();
   });
 }
 
-// Step 1: Capture screenshots
-async function captureScreenshots(symbol, intervals = ['1m', '5m', '15m']) {
-  logSection('📸 Capturing TradingView Charts');
+async function sendTelegramNotification(analysis, marketData, mode) {
+  if (!CONFIG.telegramEnabled || !CONFIG.telegramToken || !CONFIG.telegramChatId) {
+    log('Telegram notifications disabled or not configured', 'yellow');
+    return false;
+  }
+
+  const emoji = analysis.action === 'LONG' ? '🟢' : analysis.action === 'SHORT' ? '🔴' : '⚪';
+  const modeEmoji = mode === 'MAINNET' ? '💰' : '🧪';
+
+  const message = `
+${emoji} *GOBOT TRADING SIGNAL*
+${modeEmoji} *${mode}*
+
+📊 *Symbol:* \`${analysis.symbol}\`
+🎯 *Action:* \`${analysis.action}\`
+📈 *Confidence:* \`${(analysis.confidence * 100).toFixed(0)}%\`
+💰 *Price:* \`$${marketData.price?.toLocaleString() || 'N/A'}\`
+📉 *24h Change:* \`${marketData.change24h?.toFixed(2) || 0}%\`
+
+💡 *Reasoning:*
+${analysis.reasoning.substring(0, 100)}...
+
+🔒 *Risk:* 2% SL | 4% TP (2:1 RR)
+⏰ *Time:* ${new Date().toISOString()}
+`.trim();
+
+  const url = `https://api.telegram.org/bot${CONFIG.telegramToken}/sendMessage`;
+  const data = {
+    chat_id: CONFIG.telegramChatId,
+    text: message,
+    parse_mode: 'Markdown',
+    disable_web_page_preview: true,
+  };
+
+  return new Promise((resolve) => {
+    const parsed = new URL(url);
+    const client = parsed.protocol === 'https:' ? https : http;
+
+    const options = {
+      hostname: parsed.hostname,
+      port: 443,
+      path: '/bot' + CONFIG.telegramToken + '/sendMessage',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+    };
+
+    const req = client.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try {
+          const response = JSON.parse(body);
+          if (response.ok) {
+            log('✅ Telegram notification sent', 'green');
+            resolve(true);
+          } else {
+            log(`❌ Telegram failed: ${response.description}`, 'red');
+            resolve(false);
+          }
+        } catch (e) {
+          log(`❌ Telegram error: ${e.message}`, 'red');
+          resolve(false);
+        }
+      });
+    });
+
+    req.on('error', (e) => {
+      log(`❌ Telegram network error: ${e.message}`, 'red');
+      resolve(false);
+    });
+    req.write(JSON.stringify(data));
+    req.end();
+  });
+}
+
+async function captureWithAgentBrowser(symbol, intervals = ['1m', '5m', '15m']) {
+  logSection('AGENT-BROWSER CHART CAPTURE');
   
-  const results = {};
+  const screenshotDir = path.join(__dirname, 'screenshots');
+  if (!fs.existsSync(screenshotDir)) {
+    fs.mkdirSync(screenshotDir, { recursive: true });
+  }
+  
+  const capturedPaths = [];
   
   for (const interval of intervals) {
-    log(`  Capturing ${symbol} - ${interval}...`);
+    const url = `https://www.tradingview.com/chart/?symbol=BINANCE:${symbol}&interval=${interval}`;
+    const filename = `ab_${symbol}_${interval}_${Date.now()}.png`;
+    const filepath = path.join(screenshotDir, filename);
+    
+    log(`Capturing ${symbol} - ${interval}...`, 'blue');
     
     try {
-      const response = await httpRequest(
-        `${CONFIG.screenshotService}/capture`,
-        'POST',
-        { symbol, interval }
-      );
+      execSync(`agent-browser open "${url}" --headers '{"User-Agent":"Mozilla/5.0"}'`, {
+        encoding: 'utf8',
+        timeout: 15000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
       
-      if (response.status === 200 && response.data.screenshot) {
-        results[interval] = response.data.screenshot;
-        log(`  ✓ ${interval} captured (${response.data.duration_ms}ms)`, 'green');
-      } else {
-        results[interval] = null;
-        log(`  ✗ ${interval} failed`, 'red');
+      await new Promise(r => setTimeout(r, 4000));
+      
+      execSync(`agent-browser screenshot "${filepath}" --full`, {
+        encoding: 'utf8',
+        timeout: 10000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      
+      if (fs.existsSync(filepath)) {
+        log(`  ✅ ${filename}`, 'green');
+        capturedPaths.push(filepath);
       }
-    } catch (err) {
-      results[interval] = null;
-      log(`  ✗ ${interval} error: ${err.message}`, 'red');
+    } catch (e) {
+      log(`  ❌ Failed: ${e.message.substring(0, 50)}`, 'red');
     }
+    
+    await new Promise(r => setTimeout(r, 1000));
   }
   
-  const captured = Object.values(results).filter(Boolean).length;
-  log(`\n  Total captured: ${captured}/${intervals.length}`, captured === intervals.length ? 'green' : 'yellow');
+  execSync('agent-browser close', { encoding: 'utf8', timeout: 5000 });
   
-  return results;
+  return capturedPaths;
 }
 
-// Step 2: Send to QuantCrawler (mock for now - needs real Puppeteer automation)
-async function analyzeWithQuantCrawler(symbol, screenshots, accountBalance, currentPrice) {
-  logSection('🤖 QuantCrawler Analysis');
-  
-  // Check if QuantCrawler Puppeteer service is available
-  try {
-    log('  Sending to QuantCrawler...');
-    
-    // In production, this would call the real QuantCrawler
-    // For now, we simulate the analysis based on screenshots
-    
-    const analysis = simulateQuantCrawlerAnalysis(symbol, screenshots, currentPrice);
-    
-    log(`  ✓ Analysis complete`, 'green');
-    log(`  Direction: ${analysis.direction}`, 'green');
-    log(`  Confidence: ${analysis.confidence}%`, 'green');
-    log(`  Entry: ${analysis.entry_price}`, 'blue');
-    log(`  Stop: ${analysis.stop_loss}`, 'blue');
-    log(`  Target: ${analysis.take_profit}`, 'blue');
-    
-    return analysis;
-  } catch (err) {
-    log(`  ✗ Analysis failed: ${err.message}`, 'red');
-    throw err;
-  }
-}
-
-// Simulate QuantCrawler analysis (replace with real implementation)
-function simulateQuantCrawlerAnalysis(symbol, screenshots, currentPrice) {
-  // This simulates what QuantCrawler would return
-  // In production, this would be actual AI analysis
-  
-  const directions = ['LONG', 'SHORT', 'HOLD'];
-  const direction = directions[Math.floor(Math.random() * 3)];
-  const confidence = Math.floor(Math.random() * 30) + 60; // 60-90%
-  
-  const price = currentPrice || 0.00001;
-  const stopDistance = price * 0.005; // 0.5%
-  const targetDistance = price * 0.015; // 1.5%
-  
-  return {
-    symbol,
-    direction,
-    confidence,
-    entry_price: price,
-    stop_loss: direction === 'LONG' ? price - stopDistance : price + stopDistance,
-    take_profit: direction === 'LONG' ? price + targetDistance : price - targetDistance,
-    risk_reward_ratio: 3.0,
-    recommendation: `QuantCrawler analysis for ${symbol}: ${direction} signal with ${confidence}% confidence. ${screenshots['1m'] ? 'Screenshots analyzed across 3 timeframes.' : 'Limited data available.'}`,
-    timeframes: {
-      '15m': direction === 'LONG' ? 'Bullish momentum building, consider long entry' : 'Bearish pressure, look for shorts',
-      '5m': 'Volume increasing, momentum aligned with higher timeframe',
-      '1m': 'Short-term volatility present, await confirmation'
-    },
-    key_levels: {
-      support: price * 0.99,
-      resistance: price * 1.01
-    },
-    confluence: '2/3 timeframes agree',
-    timestamp: new Date().toISOString()
-  };
-}
-
-// Step 3: Send trade signal to GOBOT
-async function sendToGOBOT(analysis) {
-  logSection('📤 Sending Trade Signal to GOBOT');
+async function fetchMarketData(symbol) {
+  const url = `${CONFIG.getBinanceBaseURL()}/fapi/v1/ticker/24hr?symbol=${symbol.toUpperCase()}`;
   
   try {
-    const signal = {
-      symbol: analysis.symbol,
-      action: analysis.direction === 'HOLD' ? 'hold' : analysis.direction.toLowerCase(),
-      confidence: analysis.confidence / 100,
-      entry_price: analysis.entry_price,
-      stop_loss: analysis.stop_loss,
-      take_profit: analysis.take_profit,
-      risk_reward: analysis.risk_reward_ratio,
-      recommendation: analysis.recommendation,
-      source: 'quantcrawler-automation',
-      request_id: `auto_${Date.now()}`,
-      timestamp: analysis.timestamp
+    const response = await httpRequest(url);
+    return {
+      price: parseFloat(response.data.lastPrice),
+      change24h: parseFloat(response.data.priceChangePercent),
     };
-    
-    log(`  Sending signal for ${signal.symbol}...`);
-    
-    const response = await httpRequest(
-      CONFIG.gobotWebhook,
-      'POST',
-      signal
-    );
+  } catch (e) {
+    log(`Market data unavailable: ${e.message}`, 'yellow');
+    return { price: 0, change24h: 0 };
+  }
+}
+
+async function sendToGobot(signal, marketData) {
+  logSection('SENDING TRADE SIGNAL TO GOBOT');
+  
+  const payload = {
+    symbol: signal.symbol,
+    action: signal.action,
+    confidence: signal.confidence,
+    entry_price: signal.entry_price || marketData.price?.toString() || '0',
+    stop_loss: signal.stop_loss || '0',
+    take_profit: signal.take_profit || '0',
+    risk_reward: signal.risk_reward || 2,
+    reasoning: signal.reasoning,
+    analysis_id: signal.analysis_id,
+    timestamp: signal.timestamp,
+    source: signal.source || 'ai-analyzer',
+  };
+  
+  try {
+    const response = await httpRequest(CONFIG.gobotWebhook, 'POST', payload);
     
     if (response.status === 200) {
-      log(`  ✓ Signal sent to GOBOT`, 'green');
+      log(`✅ Signal sent to GOBOT`, 'green');
       return true;
     } else {
-      log(`  ⚠ GOBOT responded with ${response.status}`, 'yellow');
+      log(`❌ Failed: ${response.status}`, 'red');
       return false;
     }
-  } catch (err) {
-    log(`  ✗ Failed to send: ${err.message}`, 'red');
+  } catch (e) {
+    log(`❌ Webhook error: ${e.message}`, 'red');
     return false;
   }
 }
 
-// Step 4: Run complete workflow
-async function runWorkflow(symbol, accountBalance = 10000, currentPrice = 0) {
-  const startTime = Date.now();
+async function runTradingCycle(symbol, balance) {
+  logSection('GOBOT AUTOMATED TRADING ANALYSIS');
+  log(`Symbol: ${symbol}`);
+  log(`Balance: $${balance}`);
+  log(`Mode: ${CONFIG.useTestnet ? 'TESTNET 🧪' : 'MAINNET 💰'}`);
   
-  console.log('');
-  log('═══════════════════════════════════════════════════', 'blue');
-  log('  🤖 GOBOT Automated Trading Analysis', 'blue');
-  log('═══════════════════════════════════════════════════', 'blue');
-  log('');
-  log(`Symbol: ${symbol}`, 'blue');
-  log(`Balance: $${accountBalance}`, 'blue');
-  log(`Started: ${new Date().toISOString()}`, 'blue');
+  const chartPaths = await captureWithAgentBrowser(symbol);
   
-  try {
-    // Step 1: Capture screenshots
-    const screenshots = await captureScreenshots(symbol);
-    
-    // Step 2: QuantCrawler analysis
-    const analysis = await analyzeWithQuantCrawler(symbol, screenshots, accountBalance, currentPrice);
-    
-    // Step 3: Send to GOBOT
-    await sendToGOBOT(analysis);
-    
-    // Summary
-    const duration = Date.now() - startTime;
-    
-    logSection('✅ Workflow Complete');
-    log(`Duration: ${(duration / 1000).toFixed(2)}s`, 'green');
-    log(`Direction: ${analysis.direction}`, 'green');
-    log(`Confidence: ${analysis.confidence}%`, 'green');
-    log(`Entry: ${analysis.entry_price}`, 'blue');
-    log(`Stop: ${analysis.stop_loss}`, 'blue');
-    log(`Target: ${analysis.take_profit}`, 'blue');
-    
-    return {
-      success: true,
-      symbol,
-      analysis,
-      duration_ms: duration
-    };
-    
-  } catch (err) {
-    logSection('❌ Workflow Failed');
-    log(err.message, 'red');
-    
-    return {
-      success: false,
-      symbol,
-      error: err.message
-    };
+  if (chartPaths.length === 0) {
+    log('No charts captured, aborting', 'red');
+    return { success: false, reason: 'No charts captured' };
   }
+  
+  log(`Captured ${chartPaths.length}/3 charts`, chartPaths.length === 3 ? 'green' : 'yellow');
+  
+  const marketData = await fetchMarketData(symbol);
+  if (marketData.price > 0) {
+    log(`Price: $${marketData.price.toLocaleString()}`, 'blue');
+    log(`24h Change: ${marketData.change24h.toFixed(2)}%`, marketData.change24h >= 0 ? 'green' : 'red');
+  }
+  
+  logSection('AI ANALYSIS');
+  const analysis = await aiAnalyzer.analyzeSymbol(symbol, balance);
+  
+  log('');
+  log('📊 AI ANALYSIS RESULTS:', 'cyan');
+  log(`  Direction:    ${analysis.action}`, analysis.action === 'LONG' ? 'green' : analysis.action === 'SHORT' ? 'red' : 'yellow');
+  log(`  Confidence:   ${(analysis.confidence * 100).toFixed(0)}%`, 'green');
+  if (analysis.entry_price !== '0.00000000') {
+    log(`  Entry Price:  ${analysis.entry_price}`, 'blue');
+    log(`  Stop Loss:    ${analysis.stop_loss}`, 'blue');
+    log(`  Take Profit:  ${analysis.take_profit}`, 'blue');
+  }
+  log(`  Reasoning:    ${analysis.reasoning.substring(0, 60)}...`, 'yellow');
+  
+  const mode = CONFIG.useTestnet ? 'TESTNET' : 'MAINNET';
+  
+  logSection('TELEGRAM ALERTS');
+  await sendTelegramNotification(analysis, marketData, mode);
+  
+  await sendToGobot(analysis, marketData);
+  
+  return { success: true, analysis, marketData };
 }
 
-// CLI interface
 async function main() {
   const args = process.argv.slice(2);
-  const symbol = args[0] || '1000PEPEUSDT';
-  const balance = parseFloat(args[1]) || 10000;
   
-  // Display configuration
-  logSection('⚙️  Configuration');
-  log(`  Mode: ${CONFIG.useTestnet ? 'TESTNET 🧪' : 'MAINNET 💰'}`, CONFIG.useTestnet ? 'yellow' : 'green');
-  log(`  Binance API: ${CONFIG.getBinanceBaseURL()}`, 'blue');
-  log(`  Screenshot Service: ${CONFIG.screenshotService}`, 'blue');
-  log(`  GOBOT: ${CONFIG.gobotWebhook}`, 'blue');
-  
-  // Check for Binance API keys
-  const apiKey = process.env.BINANCE_TESTNET_API || process.env.BINANCE_API_KEY;
-  if (apiKey) {
-    log(`  API Key: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length-4)}`, 'green');
-  } else {
-    log(`  API Key: Not configured`, 'yellow');
-  }
-  
-  // Test Binance connectivity
-  await testBinanceConnection(symbol);
-  
-  // Check if service is available
-  try {
-    await httpRequest(`${CONFIG.screenshotService}/health`);
-  } catch (err) {
-    log('\n⚠️  Screenshot service not running!', 'yellow');
-    log('Start it first:', 'yellow');
-    log('  cd services/screenshot-service && npm start\n', 'blue');
+  if (args.length < 1) {
+    console.log(`
+GOBOT Automated Trading - Agent-Browser + AI
+=============================================
+
+Usage: node auto-trade.js <symbol> [balance]
+
+Example:
+  node auto-trade.js BTCUSDT 1000
+  node auto-trade.js 1000PEPEUSDT 500
+
+Environment Variables:
+  OPENAI_API_KEY       - For GPT-4o Vision analysis
+  GOOGLE_EMAIL         - For authenticated TradingView
+  GOOGLE_APP_PASSWORD  - App password for Google Auth
+
+Features:
+  - agent-browser for TradingView chart capture
+  - GPT-4o Vision AI analysis (when API key set)
+  - Structured trading signals
+  - GOBOT webhook integration
+`);
     process.exit(1);
   }
   
-  await runWorkflow(symbol, balance);
-}
-
-// Test Binance connection
-async function testBinanceConnection(symbol = '1000PEPEUSDT') {
-  logSection('🔗 Binance Testnet Connection');
-  
-  const baseURL = CONFIG.getBinanceBaseURL();
+  const symbol = args[0];
+  const balance = parseFloat(args[1]) || 100;
   
   try {
-    // Test 1: Ping
-    log('  Testing ping...');
-    const pingResponse = await httpRequest(`${baseURL}/fapi/v1/ping`);
-    log(`  ✓ Ping successful`, 'green');
+    const result = await runTradingCycle(symbol, balance);
     
-    // Test 2: Server time
-    log('  Testing server time...');
-    const timeResponse = await httpRequest(`${baseURL}/fapi/v1/time`);
-    const serverTime = new Date(timeResponse.data.serverTime);
-    log(`  ✓ Server time: ${serverTime.toLocaleTimeString()}`, 'blue');
-    
-    // Test 3: Ticker price (public data)
-    log(`  Fetching ${symbol} price...`);
-    const tickerResponse = await httpRequest(`${baseURL}/fapi/v1/ticker/price?symbol=${symbol}`);
-    if (tickerResponse.data.price) {
-      log(`  ✓ ${symbol}: $${tickerResponse.data.price}`, 'green');
+    console.log('');
+    if (result.success) {
+      log('✅ WORKFLOW COMPLETE', 'green');
+    } else {
+      log('⚠️ WORKFLOW INCOMPLETE', 'yellow');
     }
-    
-    // Test 4: 24hr stats
-    log('  Fetching 24hr stats...');
-    const statsResponse = await httpRequest(`${baseURL}/fapi/v1/ticker/24hr?symbol=${symbol}`);
-    if (statsResponse.data.priceChangePercent) {
-      const change = parseFloat(statsResponse.data.priceChangePercent).toFixed(2);
-      const changeColor = change >= 0 ? 'green' : 'red';
-      log(`  24hr Change: ${change}%`, changeColor);
-    }
-    
-    log('\n  ✅ Testnet connection verified!', 'green');
-    
-  } catch (err) {
-    log(`  ⚠️  Connection test failed: ${err.message}`, 'yellow');
-    log('  ℹ️  Public data endpoints may still work', 'yellow');
+  } catch (error) {
+    log(`Failed: ${error.message}`, 'red');
+    process.exit(1);
   }
 }
 
-main().catch(console.error);
+if (require.main === module) {
+  main();
+}
+
+module.exports = { runTradingCycle, captureWithAgentBrowser, sendToGobot };

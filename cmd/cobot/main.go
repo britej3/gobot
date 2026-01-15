@@ -20,6 +20,7 @@ import (
 	"github.com/britebrt/cognee/domain/selector"
 	"github.com/britebrt/cognee/domain/strategy"
 	"github.com/britebrt/cognee/infra/binance"
+	"github.com/britebrt/cognee/pkg/stealth"
 	"github.com/britebrt/cognee/services/executor/market"
 	"github.com/britebrt/cognee/services/screenshot"
 	"github.com/britebrt/cognee/services/selector/volume"
@@ -37,7 +38,19 @@ func main() {
 		APISecret: os.Getenv("BINANCE_API_SECRET"),
 		Testnet:   os.Getenv("BINANCE_USE_TESTNET") == "true",
 	})
-	_ = binanceClient
+
+	stealthClient := stealth.New(stealth.StealthConfig{
+		JitterRange:       100 * time.Millisecond,
+		RequestDelayMin:   50 * time.Millisecond,
+		RequestDelayMax:   200 * time.Millisecond,
+		UserAgents:        stealth.CommonUserAgents(),
+		RotateUserAgents:  true,
+		SignatureVariance: 0.01,
+	})
+	_ = stealthClient
+
+	rateLimitedClient := binance.NewRateLimitedClient(binanceClient, 10, 20)
+	marketDataProvider := binance.NewMarketDataProviderWithStealth(rateLimitedClient, stealthClient)
 
 	llmCfg, err := config.LoadLLMConfig(ctx)
 	if err != nil {
@@ -110,8 +123,10 @@ func main() {
 				},
 			},
 		},
-		Engine:     engine,
-		Components: &platform.Components{},
+		Engine: engine,
+		Components: &platform.Components{
+			MarketDataProvider: marketDataProvider,
+		},
 	}
 
 	if err := p.Initialize(ctx); err != nil {

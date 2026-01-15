@@ -1,0 +1,202 @@
+# ============================================================================
+# GOBOT PRODUCTION CONFIGURATION
+# Autonomous Trading Bot - Mainnet Ready
+# ============================================================================
+# This file contains ALL configuration for production trading
+# Environment variables override these settings
+# ============================================================================
+
+# ============================================================================
+# BINANCE API CONFIGURATION
+# ============================================================================
+binance:
+  api_key: "${BINANCE_API_KEY}"
+  api_secret: "${BINANCE_API_SECRET}"
+  use_testnet: false
+  rate_limit_rps: 8
+  rate_limit_burst: 16
+  recv_window_ms: 5000
+
+# ============================================================================
+# TRADING PARAMETERS
+# ============================================================================
+trading:
+  initial_capital_usd: 100
+  max_position_usd: 10
+  daily_trade_limit: 30
+  weekly_loss_limit: 50
+  stop_loss_percent: 2.0
+  take_profit_percent: 4.0
+  trailing_stop_enabled: true
+  trailing_stop_percent: 1.5
+  max_daily_drawdown: 5.0
+  kelly_fraction: 0.25
+  max_risk_per_trade: 0.02
+
+  # Timing
+  trading_interval_minutes: 60
+  max_trades_per_day: 3
+  symbol_cooldown_minutes: 180
+
+  # Signal Quality
+  min_confidence_threshold: 0.75
+  min_risk_reward_ratio: 2.0
+  max_spread_percent: 0.1
+  min_volume_24h_usd: 10000000
+
+# ============================================================================
+# AUTO-EXECUTION
+# ============================================================================
+execution:
+  auto_execute: true
+  min_confidence: 0.75
+  max_daily_trades: 5
+  require_trend_confirmation: true
+  require_volume_spike: true
+
+# ============================================================================
+# ANTI-DETECTION / STEALTH MODE
+# ============================================================================
+stealth:
+  enabled: true
+  jitter_enabled: true
+  jitter_range_ms: 150
+  user_agent_rotation: true
+  request_delay_min_ms: 100
+  request_delay_max_ms: 300
+  api_rate_limit_rps: 5
+  signature_variance: 0.01
+  fingerprint_randomization: true
+
+# ============================================================================
+# AI / GPT-4o VISION CONFIGURATION
+# ============================================================================
+ai:
+  enabled: true
+  
+  # Primary: Kimi-K2 (Moonshot AI) - FREE, fast, great for crypto analysis
+  primary_model: "moonshotai/kimi-k2-instruct"
+  
+  # Fallback: Llama 3.3 70B - FREE, larger context
+  fallback_model: "llama-3.3-70b-versatile"
+  
+  # Last resort: Gemini 1.5 Flash - FREE tier available
+  gemini_model: "gemini-1.5-flash"
+  
+  # Token estimates
+  prompt_tokens: 400
+  response_tokens: 150
+  total_tokens_per_request: 550
+  
+  # Rate limits (Groq free tier)
+  max_requests_per_hour: 20
+  max_tokens_per_minute: 10000
+
+# ============================================================================
+# WATCHLIST - HIGH PROBABILITY SETUPS
+# ============================================================================
+watchlist:
+  symbols:
+    - "BTCUSDT"
+    - "ETHUSDT"
+    - "SOLUSDT"
+    - "BNBUSDT"
+    - "XRPUSDT"
+    - "ADAUSDT"
+    - "DOGEUSDT"
+    - "DOTUSDT"
+    - "LINKUSDT"
+    - "AVAXUSDT"
+
+# ============================================================================
+# RISK MANAGEMENT
+# ============================================================================
+risk:
+  max_api_errors_per_hour: 3
+  max_api_error_percent: 0.05
+  max_acceptable_latency_ms: 500
+  daily_loss_alert: -10
+  consecutive_loss_alert: 2
+  position_size_alert: 5
+
+# ============================================================================
+# EMERGENCY CONTROLS
+# ============================================================================
+emergency:
+  kill_switch_enabled: true
+  kill_switch_password: "STOP123"
+  kill_switch_file: "/tmp/gobot_kill_switch"
+  enable_recovery: true
+  recovery_mode: "conservative"
+  max_recovery_attempts: 1
+  recovery_cooldown_hours: 24
+
+# ============================================================================
+# MONITORING & ALERTS
+# ============================================================================
+monitoring:
+  telegram_enabled: true
+  telegram_token: "${TELEGRAM_TOKEN}"
+  telegram_chat_id: "${TELEGRAM_CHAT_ID}"
+  alert_on_trade: true
+  alert_on_pnl_milestone: true
+  alert_on_risk_breach: true
+  alert_on_system_error: true
+
+  # Logging
+  audit_log_enabled: true
+  audit_log_path: "/Users/britebrt/GOBOT/logs/mainnet_audit.log"
+  trade_log_path: "/Users/britebrt/GOBOT/logs/trades_mainnet.log"
+  detailed_trade_log: true
+  log_level: "info"
+
+# ============================================================================
+# STATE PERSISTENCE
+# ============================================================================
+state:
+  persistence_enabled: true
+  state_dir: "/Users/britebrt/GOBOT/state"
+  state_file: "trading_state.json"
+  save_interval_seconds: 30
+
+# ============================================================================
+# PERFORMANCE
+# ============================================================================
+performance:
+  max_memory_mb: 256
+  restart_interval_hours: 12
+  cache_klines_minutes: 5
+  cache_price_seconds: 30
+  max_concurrent_requests: 5
+
+# ============================================================================
+# TRADINGVIEW / AGENT-BROWSER
+# ============================================================================
+tradingview:
+  base_url: "https://www.tradingview.com/chart/"
+  intervals:
+    - "1m"
+    - "5m"
+    - "15m"
+  screenshot_dir: "/Users/britebrt/GOBOT/services/screenshot-service/screenshots"
+
+# ============================================================================
+# N8N INTEGRATION (Optional)
+# ============================================================================
+n8n:
+  enabled: false
+  base_url: "http://localhost:5678"
+  webhook_user: "gobot_mainnet"
+  webhook_pass: "${N8N_WEBHOOK_PASS}"
+  trade_webhook: "http://localhost:5678/webhook/mainnet_trade"
+  alert_webhook: "http://localhost:5678/webhook/mainnet_alert"
+
+# ============================================================================
+# CIRCUIT BREAKER
+# ============================================================================
+circuit_breaker:
+  enabled: true
+  failure_threshold: 5
+  failure_window_seconds: 60
+  recovery_timeout_seconds: 300
+  half_open_requests: 3
