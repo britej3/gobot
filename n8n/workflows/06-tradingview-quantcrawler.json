@@ -1,0 +1,294 @@
+{
+  "name": "TradingView Chart Analysis with QuantCrawler Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "symbol",
+              "value": "={{ $json.body.symbol || $json.symbol || 'BTCUSDT' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "account_balance",
+              "value": "={{ $json.body.account_balance || $json.balance || 10000 }}",
+              "type": "number"
+            },
+            {
+              "id": "id-3",
+              "name": "current_price",
+              "value": "={{ $json.body.current_price || $json.price || 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "id-4",
+              "name": "request_id",
+              "value": "={{ $json.body.request_id || $json.request_id || 'req_' + Date.now() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "513c1061-be55-4ab0-86ae-6d60b89df38b",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -32,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3456/capture",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"symbol\": $('Workflow Configuration').item.json.symbol, \"interval\": \"1m\" } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "4c884ea2-06ec-472d-ac23-3f0f83311bfe",
+      "name": "Capture 1min Chart",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        192,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3456/capture",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"symbol\": $('Workflow Configuration').item.json.symbol, \"interval\": \"5m\" } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "72243e9d-6c48-4e44-8f2d-2eba0ba05186",
+      "name": "Capture 5min Chart",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        192,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3456/capture",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"symbol\": $('Workflow Configuration').item.json.symbol, \"interval\": \"15m\" } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "6bd8e0a3-ad66-4fb1-801a-37edba8b6b1b",
+      "name": "Capture 15min Chart",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        192,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "fbd9821f-ddb1-4170-928f-51b0bed347c8",
+      "name": "Merge Screenshots",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        416,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "screenshots",
+              "value": "={{ { '1m': $('Capture 1min Chart').item.json.screenshot, '5m': $('Capture 5min Chart').item.json.screenshot, '15m': $('Capture 15min Chart').item.json.screenshot } }}",
+              "type": "object"
+            },
+            {
+              "id": "id-2",
+              "name": "symbol",
+              "value": "={{ $('Workflow Configuration').item.json.symbol }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "account_balance",
+              "value": "={{ $('Workflow Configuration').item.json.account_balance }}",
+              "type": "number"
+            },
+            {
+              "id": "id-4",
+              "name": "current_price",
+              "value": "={{ $('Workflow Configuration').item.json.current_price }}",
+              "type": "number"
+            },
+            {
+              "id": "id-5",
+              "name": "request_id",
+              "value": "={{ $('Workflow Configuration').item.json.request_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b6ff294e-8492-4903-b176-c52cdc97c542",
+      "name": "Prepare QuantCrawler Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        640,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// QuantCrawler Automation Mock\n// In production, this would call the QuantCrawler Puppeteer service\nconst inputData = $input.all()[0].json;\n\n// Mock QuantCrawler response (replace with actual QuantCrawler call)\nconst mockAnalysis = {\n  symbol: inputData.symbol,\n  direction: Math.random() > 0.5 ? 'LONG' : 'SHORT',\n  confidence: Math.floor(Math.random() * 40) + 60,\n  entry: inputData.current_price || 0,\n  stop_loss: (inputData.current_price || 0) * 0.995,\n  take_profit: (inputData.current_price || 0) * 1.015,\n  recommendation: `Based on ${inputData.symbol} analysis: ${Math.random() > 0.5 ? 'Bullish' : 'Bearish'} momentum detected across multiple timeframes. Consider ${Math.random() > 0.5 ? 'LONG' : 'SHORT'} position with tight stop.`,\n  timeframes: {\n    '15m': 'Price action showing consolidation with potential breakout',\n    '5m': 'Increasing volume on upward movement',\n    '1m': 'Short-term volatility elevated, await confirmation'\n  },\n  key_levels: {\n    support: (inputData.current_price || 0) * 0.99,\n    resistance: (inputData.current_price || 0) * 1.01\n  },\n  request_id: inputData.request_id,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: mockAnalysis }];"
+      },
+      "id": "5db28d88-c9e4-4612-b525-4b91870442d5",
+      "name": "QuantCrawler Automation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8080/webhook/trade_signal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  symbol: $('QuantCrawler Automation').item.json.symbol,\n  action: $('QuantCrawler Automation').item.json.direction === 'HOLD' ? 'hold' : $('QuantCrawler Automation').item.json.direction.toLowerCase(),\n  confidence: $('QuantCrawler Automation').item.json.confidence / 100,\n  entry_price: $('QuantCrawler Automation').item.json.entry,\n  stop_loss: $('QuantCrawler Automation').item.json.stop_loss,\n  take_profit: $('QuantCrawler Automation').item.json.take_profit,\n  recommendation: $('QuantCrawler Automation').item.json.recommendation,\n  source: 'tradingview-quantcrawler',\n  request_id: $('QuantCrawler Automation').item.json.request_id\n} }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "abc123",
+      "name": "Send to GOBOT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1088,
+        832
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Capture 1min Chart",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Capture 5min Chart",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Capture 15min Chart",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Screenshots": {
+      "main": [
+        [
+          {
+            "node": "Prepare QuantCrawler Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare QuantCrawler Payload": {
+      "main": [
+        [
+          {
+            "node": "QuantCrawler Automation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture 1min Chart": {
+      "main": [
+        [
+          {
+            "node": "Merge Screenshots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture 5min Chart": {
+      "main": [
+        [
+          {
+            "node": "Merge Screenshots",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Capture 15min Chart": {
+      "main": [
+        [
+          {
+            "node": "Merge Screenshots",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "QuantCrawler Automation": {
+      "main": [
+        [
+          {
+            "node": "Send to GOBOT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "tradingview-quantcrawler-workflow"
+}
