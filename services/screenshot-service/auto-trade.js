@@ -19,10 +19,22 @@ const https = require('https');
 
 // Configuration
 const CONFIG = {
+  // Testnet vs Mainnet mode
+  useTestnet: process.env.BINANCE_USE_TESTNET === 'true' || process.env.TESTNET === 'true',
+  
+  // Service endpoints
   screenshotService: 'http://localhost:3456',
-  quantCrawler: 'http://localhost:3456/webhook',  // Updated path
+  quantCrawler: 'http://localhost:3456/webhook',
   gobotWebhook: 'http://localhost:8080/webhook/trade_signal',
   n8nWebhook: 'http://localhost:5678/webhook/tradingview-analysis',
+  
+  // Binance endpoints (auto-selected based on useTestnet)
+  getBinanceBaseURL() {
+    return this.useTestnet 
+      ? 'https://testnet.binancefuture.com' 
+      : 'https://fapi.binance.com';
+  },
+  
   timeout: 120000, // 2 minutes
 };
 
@@ -286,6 +298,26 @@ async function main() {
   const symbol = args[0] || '1000PEPEUSDT';
   const balance = parseFloat(args[1]) || 10000;
   
+  // Display configuration
+  logSection('⚙️  Configuration');
+  log(`  Mode: ${CONFIG.useTestnet ? 'TESTNET 🧪' : 'MAINNET 💰'}`, CONFIG.useTestnet ? 'yellow' : 'green');
+  log(`  Binance API: ${CONFIG.getBinanceBaseURL()}`, 'blue');
+  log(`  Screenshot Service: ${CONFIG.screenshotService}`, 'blue');
+  log(`  GOBOT: ${CONFIG.gobotWebhook}`, 'blue');
+  
+  // Check for Binance API keys
+  const apiKey = process.env.BINANCE_TESTNET_API || process.env.BINANCE_API_KEY;
+  if (apiKey) {
+    log(`  API Key: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length-4)}`, 'green');
+  } else {
+    log(`  API Key: Not configured`, 'yellow');
+  }
+  
+  // Test Binance connection if configured
+  if (apiKey) {
+    await testBinanceConnection();
+  }
+  
   // Check if service is available
   try {
     await httpRequest(`${CONFIG.screenshotService}/health`);
@@ -297,6 +329,34 @@ async function main() {
   }
   
   await runWorkflow(symbol, balance);
+}
+
+// Test Binance connection
+async function testBinanceConnection() {
+  logSection('🔗 Binance Connection Test');
+  
+  try {
+    const url = `${CONFIG.getBinanceBaseURL()}/fapi/v1/ping`;
+    const response = await httpRequest(url);
+    
+    if (response.status === 200) {
+      log(`  ✓ Connected to ${CONFIG.useTestnet ? 'Testnet' : 'Mainnet'}`, 'green');
+      log(`  ✓ Ping successful`, 'green');
+      
+      // Get server time
+      const timeUrl = `${CONFIG.getBinanceBaseURL()}/fapi/v1/time`;
+      const timeResponse = await httpRequest(timeUrl);
+      if (timeResponse.data.serverTime) {
+        const serverTime = new Date(timeResponse.data.serverTime);
+        log(`  ✓ Server time: ${serverTime.toLocaleTimeString()}`, 'blue');
+      }
+    } else {
+      log(`  ✗ Connection failed: ${response.status}`, 'red');
+    }
+  } catch (err) {
+    log(`  ⚠️  Connection test failed: ${err.message}`, 'yellow');
+    log(`  ℹ️  This is OK if you just want to test the screenshot workflow`, 'yellow');
+  }
 }
 
 main().catch(console.error);
