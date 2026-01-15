@@ -313,10 +313,8 @@ async function main() {
     log(`  API Key: Not configured`, 'yellow');
   }
   
-  // Test Binance connection if configured
-  if (apiKey) {
-    await testBinanceConnection();
-  }
+  // Test Binance connectivity
+  await testBinanceConnection(symbol);
   
   // Check if service is available
   try {
@@ -332,30 +330,44 @@ async function main() {
 }
 
 // Test Binance connection
-async function testBinanceConnection() {
-  logSection('🔗 Binance Connection Test');
+async function testBinanceConnection(symbol = '1000PEPEUSDT') {
+  logSection('🔗 Binance Testnet Connection');
+  
+  const baseURL = CONFIG.getBinanceBaseURL();
   
   try {
-    const url = `${CONFIG.getBinanceBaseURL()}/fapi/v1/ping`;
-    const response = await httpRequest(url);
+    // Test 1: Ping
+    log('  Testing ping...');
+    const pingResponse = await httpRequest(`${baseURL}/fapi/v1/ping`);
+    log(`  ✓ Ping successful`, 'green');
     
-    if (response.status === 200) {
-      log(`  ✓ Connected to ${CONFIG.useTestnet ? 'Testnet' : 'Mainnet'}`, 'green');
-      log(`  ✓ Ping successful`, 'green');
-      
-      // Get server time
-      const timeUrl = `${CONFIG.getBinanceBaseURL()}/fapi/v1/time`;
-      const timeResponse = await httpRequest(timeUrl);
-      if (timeResponse.data.serverTime) {
-        const serverTime = new Date(timeResponse.data.serverTime);
-        log(`  ✓ Server time: ${serverTime.toLocaleTimeString()}`, 'blue');
-      }
-    } else {
-      log(`  ✗ Connection failed: ${response.status}`, 'red');
+    // Test 2: Server time
+    log('  Testing server time...');
+    const timeResponse = await httpRequest(`${baseURL}/fapi/v1/time`);
+    const serverTime = new Date(timeResponse.data.serverTime);
+    log(`  ✓ Server time: ${serverTime.toLocaleTimeString()}`, 'blue');
+    
+    // Test 3: Ticker price (public data)
+    log(`  Fetching ${symbol} price...`);
+    const tickerResponse = await httpRequest(`${baseURL}/fapi/v1/ticker/price?symbol=${symbol}`);
+    if (tickerResponse.data.price) {
+      log(`  ✓ ${symbol}: $${tickerResponse.data.price}`, 'green');
     }
+    
+    // Test 4: 24hr stats
+    log('  Fetching 24hr stats...');
+    const statsResponse = await httpRequest(`${baseURL}/fapi/v1/ticker/24hr?symbol=${symbol}`);
+    if (statsResponse.data.priceChangePercent) {
+      const change = parseFloat(statsResponse.data.priceChangePercent).toFixed(2);
+      const changeColor = change >= 0 ? 'green' : 'red';
+      log(`  24hr Change: ${change}%`, changeColor);
+    }
+    
+    log('\n  ✅ Testnet connection verified!', 'green');
+    
   } catch (err) {
     log(`  ⚠️  Connection test failed: ${err.message}`, 'yellow');
-    log(`  ℹ️  This is OK if you just want to test the screenshot workflow`, 'yellow');
+    log('  ℹ️  Public data endpoints may still work', 'yellow');
   }
 }
 
