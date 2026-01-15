@@ -2,7 +2,7 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 
 const app = express();
-const PORT = 3000;
+const PORT = 3456;
 
 // Middleware
 app.use(express.json());
@@ -25,6 +25,7 @@ async function initBrowser() {
   
   browser = await puppeteer.launch({
     headless: 'new',
+    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',

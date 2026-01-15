@@ -66,7 +66,7 @@ func main() {
 	})
 
 	engine.RegisterAutomation(automation.AutomationN8N, func() automation.Automation {
-		return &automation.N8NAutomation{}
+		return automation.NewN8NAutomation()
 	})
 
 	p := &platform.Platform{
@@ -204,7 +204,7 @@ func startWebhookServer(ctx context.Context, cfg *config.N8NConfig) {
 
 		// Call TradingView screenshot service
 		screenshotClient := screenshot.NewClient(screenshot.Config{
-			ServerURL: "http://localhost:3000",
+			ServerURL: "http://localhost:3456",
 		}, slog.Default())
 
 		result, err := screenshotClient.CaptureMulti(req.Symbol, req.Intervals)
@@ -240,7 +240,7 @@ func startWebhookServer(ctx context.Context, cfg *config.N8NConfig) {
 
 		// Step 1: Capture screenshots
 		screenshotClient := screenshot.NewClient(screenshot.Config{
-			ServerURL: "http://localhost:3000",
+			ServerURL: "http://localhost:3456",
 		}, slog.Default())
 
 		result, err := screenshotClient.CaptureMulti(req.Symbol, []string{"1m", "5m", "15m"})

@@ -1,0 +1,16 @@
+{
+  "name": "gobot-n8n-local",
+  "version": "1.0.0",
+  "description": "Local N8N alternative for GOBOT trading bot",
+  "main": "n8n-local.js",
+  "scripts": {
+    "start": "node n8n-local.js",
+    "dev": "node --watch n8n-local.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "keywords": ["gobot", "trading", "webhook", "n8n-alternative"],
+  "author": "",
+  "license": "MIT"
+}
