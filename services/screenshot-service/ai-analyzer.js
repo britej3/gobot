@@ -428,32 +428,34 @@ async function analyzeSymbol(symbol, balance = 100) {
 
   log('');
   log('Provider Priority (All FREE TIER):', 'cyan');
-  log('  1. meta-llama/llama-3.3-70b-instruct:free  ✅ (OpenRouter)', 'green');
-  log('  2. deepseek/deepseek-r1-0528:free       ✅ (OpenRouter)', 'green');
-  log('  3. google/gemini-2.0-flash-exp:free     ✅ (OpenRouter)', 'green');
-  log('  4. llama-3.3-70b-versatile              ✅ (Groq)', 'green');
-  log('  5. gemini-2.5-flash                     ✅ (Google AI Studio)', 'green');
+  log('  1. llama-3.3-70b-versatile              ✅ (Groq - 30 RPM)', 'green');
+  log('  2. meta-llama/llama-3.3-70b-instruct:free  ✅ (OpenRouter - 10-50 RPM)', 'green');
+  log('  3. deepseek/deepseek-r1-0528:free       ✅ (OpenRouter - 10-50 RPM)', 'green');
+  log('  4. google/gemini-2.0-flash-exp:free     ✅ (OpenRouter - 10-50 RPM)', 'green');
+  log('  5. gemini-2.5-flash                     ✅ (Google AI Studio - 10 RPM)', 'green');
   log('  6. Fallback (random)                    ⚠️ ', 'yellow');
   log('');
   log(`Rate Safety: ${CONFIG.maxRequestsPerHour}/hr, ~${CONFIG.promptTokens + CONFIG.responseTokens} tokens/request`, 'cyan');
 
   let analysis = null;
 
-  // 1. Try Llama 3.3 70B (OpenRouter FREE) - Best overall
-  for (const model of CONFIG.freeModels.openrouter) {
-    if (analysis) break;
-    analysis = await analyzeWithOpenRouterFree(symbol, model);
-  }
-
-  // 2. Try Llama 3.3 (Groq) - Fallback
-  if (!analysis && CONFIG.groqAPIKey) {
+  // 1. Try Groq (30 RPM, ~10K tokens/min) - Best rate limit
+  if (CONFIG.groqAPIKey) {
     for (const model of CONFIG.freeModels.groq) {
       if (analysis) break;
       analysis = await analyzeWithGroq(symbol, model);
     }
   }
 
-  // 3. Try Gemini (Google AI Studio Free)
+  // 2. Try OpenRouter FREE models (10-50 RPM) - Fallback
+  if (!analysis) {
+    for (const model of CONFIG.freeModels.openrouter) {
+      if (analysis) break;
+      analysis = await analyzeWithOpenRouterFree(symbol, model);
+    }
+  }
+
+  // 3. Try Gemini (Google AI Studio Free - 10 RPM) - Fallback
   if (!analysis && CONFIG.geminiAPIKey) {
     analysis = await analyzeWithGeminiFree(symbol);
   }

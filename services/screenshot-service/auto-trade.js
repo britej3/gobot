@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * GOBOT Automated Trading - Agent-Browser + AI Integration
+ * GOBOT Automated Trading - Agent-Browser + QuantCrawler Integration
  * 
  * Full automation pipeline:
  * 1. agent-browser captures TradingView charts (1m, 5m, 15m)
- * 2. GPT-4o Vision for AI analysis (or fallback)
- * 3. Extract structured trade signal
+ * 2. Upload screenshots to QuantCrawler with ticker and position amount
+ * 3. Get QuantCrawler report (entry, exit, SL, TP, confidence)
  * 4. Send to GOBOT webhook
  * 
  * Usage: node auto-trade.js <symbol> [balance]
@@ -33,7 +33,7 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-const aiAnalyzer = require('./ai-analyzer.js');
+const quantCrawler = require('./quantcrawler-integration.js');
 
 const CONFIG = {
   useTestnet: process.env.BINANCE_USE_TESTNET === 'false' ? false : true,
@@ -112,7 +112,7 @@ async function sendTelegramNotification(analysis, marketData, mode) {
     return false;
   }
 
-  const emoji = analysis.action === 'LONG' ? '🟢' : analysis.action === 'SHORT' ? '🔴' : '⚪';
+  const emoji = analysis.direction === 'LONG' ? '🟢' : analysis.direction === 'SHORT' ? '🔴' : '⚪';
   const modeEmoji = mode === 'MAINNET' ? '💰' : '🧪';
 
   const message = `
@@ -120,8 +120,8 @@ ${emoji} *GOBOT TRADING SIGNAL*
 ${modeEmoji} *${mode}*
 
 📊 *Symbol:* \`${analysis.symbol}\`
-🎯 *Action:* \`${analysis.action}\`
-📈 *Confidence:* \`${(analysis.confidence * 100).toFixed(0)}%\`
+🎯 *Action:* \`${analysis.direction || analysis.action}\`
+📈 *Confidence:* \`${analysis.confidence}%\`
 💰 *Price:* \`$${marketData.price?.toLocaleString() || 'N/A'}\`
 📉 *24h Change:* \`${marketData.change24h?.toFixed(2) || 0}%\`
 
@@ -250,16 +250,16 @@ async function sendToGobot(signal, marketData) {
   
   const payload = {
     symbol: signal.symbol,
-    action: signal.action,
+    action: signal.direction || signal.action,
     confidence: signal.confidence,
-    entry_price: signal.entry_price || marketData.price?.toString() || '0',
+    entry_price: signal.entry || signal.entry_price || marketData.price?.toString() || '0',
     stop_loss: signal.stop_loss || '0',
     take_profit: signal.take_profit || '0',
     risk_reward: signal.risk_reward || 2,
     reasoning: signal.reasoning,
-    analysis_id: signal.analysis_id,
+    analysis_id: signal.analysis_id || `qc_${Date.now()}`,
     timestamp: signal.timestamp,
-    source: signal.source || 'ai-analyzer',
+    source: signal.source || 'quantcrawler',
   };
   
   try {
@@ -284,30 +284,21 @@ async function runTradingCycle(symbol, balance) {
   log(`Balance: $${balance}`);
   log(`Mode: ${CONFIG.useTestnet ? 'TESTNET 🧪' : 'MAINNET 💰'}`);
   
-  const chartPaths = await captureWithAgentBrowser(symbol);
-  
-  if (chartPaths.length === 0) {
-    log('No charts captured, aborting', 'red');
-    return { success: false, reason: 'No charts captured' };
-  }
-  
-  log(`Captured ${chartPaths.length}/3 charts`, chartPaths.length === 3 ? 'green' : 'yellow');
-  
   const marketData = await fetchMarketData(symbol);
   if (marketData.price > 0) {
     log(`Price: $${marketData.price.toLocaleString()}`, 'blue');
     log(`24h Change: ${marketData.change24h.toFixed(2)}%`, marketData.change24h >= 0 ? 'green' : 'red');
   }
   
-  logSection('AI ANALYSIS');
-  const analysis = await aiAnalyzer.analyzeSymbol(symbol, balance);
+  logSection('QUANTCRAWLER ANALYSIS');
+  const analysis = await quantCrawler.analyzeWithQuantCrawler(symbol, balance);
   
   log('');
-  log('📊 AI ANALYSIS RESULTS:', 'cyan');
-  log(`  Direction:    ${analysis.action}`, analysis.action === 'LONG' ? 'green' : analysis.action === 'SHORT' ? 'red' : 'yellow');
-  log(`  Confidence:   ${(analysis.confidence * 100).toFixed(0)}%`, 'green');
-  if (analysis.entry_price !== '0.00000000') {
-    log(`  Entry Price:  ${analysis.entry_price}`, 'blue');
+  log('📊 QUANTCRAWLER ANALYSIS RESULTS:', 'cyan');
+  log(`  Direction:    ${analysis.direction}`, analysis.direction === 'LONG' ? 'green' : analysis.direction === 'SHORT' ? 'red' : 'yellow');
+  log(`  Confidence:   ${analysis.confidence}%`, 'green');
+  if (analysis.entry !== 0) {
+    log(`  Entry:        ${analysis.entry}`, 'blue');
     log(`  Stop Loss:    ${analysis.stop_loss}`, 'blue');
     log(`  Take Profit:  ${analysis.take_profit}`, 'blue');
   }
@@ -328,8 +319,8 @@ async function main() {
   
   if (args.length < 1) {
     console.log(`
-GOBOT Automated Trading - Agent-Browser + AI
-=============================================
+GOBOT Automated Trading - Agent-Browser + QuantCrawler
+=========================================================
 
 Usage: node auto-trade.js <symbol> [balance]
 
@@ -338,13 +329,13 @@ Example:
   node auto-trade.js 1000PEPEUSDT 500
 
 Environment Variables:
-  OPENAI_API_KEY       - For GPT-4o Vision analysis
-  GOOGLE_EMAIL         - For authenticated TradingView
-  GOOGLE_APP_PASSWORD  - App password for Google Auth
+  QUANTCRAWLER_EMAIL      - Google email for TradingView login
+  QUANTCRAWLER_PASSWORD   - Google App Password for OAuth
 
 Features:
-  - agent-browser for TradingView chart capture
-  - GPT-4o Vision AI analysis (when API key set)
+  - agent-browser for TradingView chart capture (1m, 5m, 15m)
+  - Upload screenshots to QuantCrawler
+  - Get detailed trading report (entry, exit, SL, TP)
   - Structured trading signals
   - GOBOT webhook integration
 `);
