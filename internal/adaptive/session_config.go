@@ -36,7 +36,7 @@ type SessionPerformance struct {
 	AvgProfit  float64
 }
 
-// Define trading sessions with optimal parameters
+// Define trading sessions with optimal parameters (only normal and high volatility)
 var TradingSessions = []TradingSession{
 	{
 		Name:              "US_SESSION_PRIME",
@@ -87,40 +87,40 @@ var TradingSessions = []TradingSession{
 		Description:       "US afternoon - moderate activity",
 	},
 	{
-		Name:              "LUNCH_LULL",
-		StartHour:         12,
-		EndHour:           13,
-		VolumeThreshold:   5.5,  // Very relaxed
-		DeltaThreshold:    0.72,
-		MomentumMin:       1.5,
-		MomentumMax:       5.0,
-		ExpectedSignals:   2,
-		PositionSizeMulti: 0.7, // Smaller positions
-		Description:       "Lunch period - low activity",
-	},
-	{
-		Name:              "LATE_ASIA",
-		StartHour:         6,
-		EndHour:           8,
-		VolumeThreshold:   5.0,
-		DeltaThreshold:    0.72,
-		MomentumMin:       1.5,
-		MomentumMax:       5.0,
-		ExpectedSignals:   3,
-		PositionSizeMulti: 0.75,
-		Description:       "Late Asia - low activity",
-	},
-	{
-		Name:              "OFF_HOURS",
+		Name:              "NORMAL_SESSION",
 		StartHour:         2,
-		EndHour:           6,
-		VolumeThreshold:   5.0,
-		DeltaThreshold:    0.70,
-		MomentumMin:       1.5,
-		MomentumMax:       5.0,
-		ExpectedSignals:   2,
-		PositionSizeMulti: 0.65, // Conservative
-		Description:       "Off-peak hours - minimal activity",
+		EndHour:           8,
+		VolumeThreshold:   6.0,  // Normal volatility
+		DeltaThreshold:    0.73,
+		MomentumMin:       2.0,
+		MomentumMax:       6.0,
+		ExpectedSignals:   5,
+		PositionSizeMulti: 0.8,
+		Description:       "Normal trading session - consistent opportunities",
+	},
+	{
+		Name:              "NORMAL_SESSION_LUNCH",
+		StartHour:         10,
+		EndHour:           13,
+		VolumeThreshold:   6.0,  // Normal volatility
+		DeltaThreshold:    0.73,
+		MomentumMin:       2.0,
+		MomentumMax:       6.0,
+		ExpectedSignals:   5,
+		PositionSizeMulti: 0.8,
+		Description:       "Normal trading session - consistent opportunities",
+	},
+	{
+		Name:              "NORMAL_SESSION_EVENING",
+		StartHour:         20,
+		EndHour:           24,
+		VolumeThreshold:   6.0,  // Normal volatility
+		DeltaThreshold:    0.73,
+		MomentumMin:       2.0,
+		MomentumMax:       6.0,
+		ExpectedSignals:   5,
+		PositionSizeMulti: 0.8,
+		Description:       "Normal trading session - consistent opportunities",
 	},
 }
 
@@ -128,12 +128,12 @@ var TradingSessions = []TradingSession{
 func GetCurrentSession() TradingSession {
 	now := time.Now().UTC()
 	hour := now.Hour()
-	weekday := now.Weekday()
+	// weekday := now.Weekday()
 
-	// Weekend check - use OFF_HOURS on weekends
-	if weekday == time.Saturday || weekday == time.Sunday {
-		return TradingSessions[len(TradingSessions)-1] // OFF_HOURS
-	}
+	// Weekend check DISABLED - crypto markets are 24/7 with scalping opportunities
+	// if weekday == time.Saturday || weekday == time.Sunday {
+	//     return TradingSessions[len(TradingSessions)-1] // OFF_HOURS
+	// }
 
 	// Check each session
 	for _, session := range TradingSessions {
@@ -200,27 +200,22 @@ func (ac *AdaptiveConfig) ResetRelaxation() {
 
 // ShouldTrade determines if current time is suitable for trading
 func ShouldTrade() (bool, string) {
-	now := time.Now().UTC()
-	weekday := now.Weekday()
-
-	// Weekend check (reduced activity)
-	if weekday == time.Saturday || weekday == time.Sunday {
-		return false, "Weekend - extremely low crypto volume"
-	}
+	// Weekend check DISABLED - crypto markets are 24/7 with scalping opportunities
+	// now := time.Now().UTC()
+	// weekday := now.Weekday()
+	// if weekday == time.Saturday || weekday == time.Sunday {
+	//     return false, "Weekend - extremely low crypto volume"
+	// }
 
 	// Get current session
 	session := GetCurrentSession()
 
-	// Always allow trading but warn on off-hours
-	if session.Name == "OFF_HOURS" {
-		return true, "Off-hours trading - use minimum position sizes"
+	// Always allow trading with normal and high volatility sessions
+	if session.ExpectedSignals >= 8 {
+		return true, "High volatility session - excellent trading opportunities"
 	}
 
-	if session.ExpectedSignals <= 2 {
-		return true, "Low activity period - expect fewer quality signals"
-	}
-
-	return true, "Active trading period"
+	return true, "Normal volatility session - consistent trading opportunities"
 }
 
 // GetOptimalPositionSize returns position size based on session and capital
@@ -241,12 +236,18 @@ func GetSessionStrategy() string {
 		strategy = "🔥 US SESSION PRIME - AGGRESSIVE MODE ENABLED\n   - Expect 15+ signals/hour\n   - Use strict filters (Volume 8x+, Delta 0.80+)\n   - Full position sizes (90% capital)\n   - Fast rotation every 60-90 seconds\n   - Best time for Below $50 setup\n   - Target: +60% session possible"
 	case "EU_SESSION":
 		strategy = "✅ EU SESSION - ACTIVE MODE\n   - Expect 10+ signals/hour\n   - Slightly relaxed filters (Volume 7x+, Delta 0.78+)\n   - 95% normal position sizes\n   - Good for multi-position rotation\n   - Target: +40-50% session"
-	case "LUNCH_LULL":
-		strategy = "⚠️ LUNCH LULL - PATIENT MODE\n   - Expect 2-4 signals/hour\n   - Relaxed filters (Volume 5.5x+, Delta 0.72+)\n   - 70% position sizes (conservative)\n   - Only take BEST signals\n   - Consider break until US session (45 min)\n   - Target: +15-25% session if trading"
-	case "OFF_HOURS":
-		strategy = "🌙 OFF HOURS - MINIMAL ACTIVITY\n   - Expect 1-2 signals/hour\n   - Very relaxed filters\n   - 65% position sizes (very conservative)\n   - RECOMMENDATION: Wait for active session\n   - Or paper trade to practice\n   - Target: +10-20% if trading"
+	case "ASIA_VOLATILITY":
+		strategy = "⚡ ASIA VOLATILITY - ACTIVE MODE\n   - Expect 8+ signals/hour\n   - Good volatility (Volume 7.5x+, Delta 0.78+)\n   - 90% normal position sizes\n   - Excellent for scalp trades\n   - Target: +30-40% session"
+	case "US_CONTINUATION":
+		strategy = "📈 US CONTINUATION - NORMAL MODE\n   - Expect 6+ signals/hour\n   - Relaxed filters (Volume 6.5x+, Delta 0.75+)\n   - 85% normal position sizes\n   - Good for steady gains\n   - Target: +25-35% session"
+	case "NORMAL_SESSION":
+		strategy = "✨ NORMAL SESSION - BALANCED MODE\n   - Expect 5+ signals/hour\n   - Normal filters (Volume 6.0x+, Delta 0.73+)\n   - 80% normal position sizes\n   - Consistent trading opportunities\n   - Target: +20-30% session"
+	case "NORMAL_SESSION_LUNCH":
+		strategy = "✨ NORMAL SESSION - BALANCED MODE\n   - Expect 5+ signals/hour\n   - Normal filters (Volume 6.0x+, Delta 0.73+)\n   - 80% normal position sizes\n   - Consistent trading opportunities\n   - Target: +20-30% session"
+	case "NORMAL_SESSION_EVENING":
+		strategy = "✨ NORMAL SESSION - BALANCED MODE\n   - Expect 5+ signals/hour\n   - Normal filters (Volume 6.0x+, Delta 0.73+)\n   - 80% normal position sizes\n   - Consistent trading opportunities\n   - Target: +20-30% session"
 	default:
-		strategy = "📊 MODERATE SESSION - Balanced approach recommended"
+		strategy = "📊 NORMAL SESSION - Balanced approach recommended"
 	}
 
 	// Add time until next prime session

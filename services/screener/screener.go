@@ -372,8 +372,8 @@ func DefaultMemeCoinFilter() AssetFilter {
 	return AssetFilter{
 		ContractType:   "PERPETUAL",
 		QuoteAsset:     "USDT",
-		MinVolume24h:   5_000_000,
-		MinPriceChange: 5.0,
+		MinVolume24h:   3_000_000, // Lower minimum for more opportunities
+		MinPriceChange: 8.0, // Higher minimum move (8%)
 		Status:         "TRADING",
 		IncludeSymbols: []string{
 			"1000PEPEUSDT",
@@ -386,6 +386,10 @@ func DefaultMemeCoinFilter() AssetFilter {
 			"ACTUSDT",
 			"LUNAUSDT",
 			"NEIROUSDT",
+			"BONKUSDT",
+			"FLOKIUSDT",
+			"DOGEUSDT",
+			"SHIBUSDT",
 		},
 		ExcludeSymbols: []string{
 			"BTCUSDT",
@@ -393,19 +397,23 @@ func DefaultMemeCoinFilter() AssetFilter {
 			"BNBUSDT",
 			"SOLUSDT",
 			"XRPUSDT",
+			"ADAUSDT",
+			"AVAXUSDT",
+			"DOTUSDT",
 		},
 	}
 }
 
 func HighVolatilityFilter() Config {
 	return Config{
-		MaxPairs: 3,
+		MaxPairs: 5, // More pairs
 		SortBy:   "volatility",
 		Filter: AssetFilter{
 			ContractType:   "PERPETUAL",
 			QuoteAsset:     "USDT",
-			MinVolume24h:   10_000_000,
-			MinPriceChange: 15.0,
+			MinVolume24h:   5_000_000, // Lower minimum
+			MinPriceChange: 12.0, // Higher minimum move (12%)
+			MaxPriceChange: 60.0, // Higher max for pump & dumps
 			Status:         "TRADING",
 		},
 	}

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install aiohttp websockets python-dotenv requests asyncio-throttle)",
+      "Bash(pkill -f gobot_mainnet_orchestrator.py)",
+      "Bash(python3 gobot_mainnet_orchestrator.py --mode live --telegram --all-monitoring)",
+      "Bash(tee gobot_live.log)",
+      "Bash(pip install python-dotenv)",
+      "Bash(pip install --user python-dotenv)"
+    ]
+  },
+  "enabledPlugins": {
+    "agent-sdk-dev@claude-code-plugins": true
+  }
+}

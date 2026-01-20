@@ -35,7 +35,7 @@ func NewCloudProvider(config CloudConfig) (*CloudProvider, error) {
 		config.Provider = "openai"
 	}
 
-	// Set default models based on provider
+// Set default models based on provider
 	if config.Model == "" {
 		switch config.Provider {
 		case "openai":
@@ -43,9 +43,13 @@ func NewCloudProvider(config CloudConfig) (*CloudProvider, error) {
 		case "anthropic":
 			config.Model = "claude-3-haiku-20240307" // Fastest Claude model
 		case "gemini":
-			config.Model = "gemini-1.5-flash" // Free tier, fast model
+			config.Model = "gemini-3-flash" // Free tier, available (0/20 RPD)
+		case "openrouter":
+			config.Model = "meta-llama/llama-3.3-70b-instruct:free" // Free model
+		case "groq":
+			config.Model = "llama-3.3-70b-versatile" // Free tier
 		default:
-			config.Model = "gemini-1.5-flash"
+			config.Model = "gemini-3-flash"
 		}
 	}
 
@@ -64,10 +68,10 @@ func NewCloudProvider(config CloudConfig) (*CloudProvider, error) {
 		modelName: config.Model,
 	}
 
-	// Test connection
-	if err := provider.testConnection(); err != nil {
-		return nil, fmt.Errorf("failed to connect to cloud provider: %w", err)
-	}
+	// Test connection (skipped to avoid daily limit issues)
+	// if err := provider.testConnection(); err != nil {
+	// 	return nil, fmt.Errorf("failed to connect to cloud provider: %w", err)
+	// }
 
 	logrus.WithFields(logrus.Fields{
 		"provider": config.Provider,
@@ -91,6 +95,10 @@ func (p *CloudProvider) GenerateResponse(ctx context.Context, prompt string) (st
 		response, err = p.callOpenAIAPI(ctx, prompt)
 	case "anthropic":
 		response, err = p.callAnthropicAPI(ctx, prompt)
+	case "openrouter":
+		response, err = p.callOpenRouterAPI(ctx, prompt)
+	case "groq":
+		response, err = p.callGroqAPI(ctx, prompt)
 	default:
 		response, err = p.callGeminiAPI(ctx, prompt)
 	}
@@ -130,29 +138,23 @@ func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
-// callGeminiAPI makes a call to Google's Gemini API
+// callGeminiAPI makes a call to Google's Gemini API using OpenAI-compatible endpoint
 func (p *CloudProvider) callGeminiAPI(ctx context.Context, prompt string) (string, error) {
 	if p.config.APIKey == "" {
 		return "", fmt.Errorf("Gemini API key not configured")
 	}
 
-	// Gemini API endpoint for gemini-1.5-flash (free tier)
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
-		p.config.Model, p.config.APIKey)
+	// Use OpenAI-compatible endpoint for Gemini
+	url := "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 
-	// Prepare request body
+	// Prepare request body (OpenAI format)
 	requestBody := map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"parts": []map[string]string{
-					{"text": prompt},
-				},
-			},
+		"model": p.config.Model,
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
 		},
-		"generationConfig": map[string]interface{}{
-			"temperature":     p.config.Temperature,
-			"maxOutputTokens": 1024,
-		},
+		"temperature": p.config.Temperature,
+		"max_tokens":  1024,
 	}
 
 	jsonBody, err := json.Marshal(requestBody)
@@ -167,6 +169,7 @@ func (p *CloudProvider) callGeminiAPI(ctx context.Context, prompt string) (strin
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
 
 	client := &http.Client{Timeout: p.config.Timeout}
 	resp, err := client.Do(req)
@@ -186,26 +189,89 @@ func (p *CloudProvider) callGeminiAPI(ctx context.Context, prompt string) (strin
 		return "", fmt.Errorf("Gemini API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse response
-	var geminiResponse struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
+	// Parse response (OpenAI format)
+	var openaiResponse struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
 	}
 
-	if err := json.Unmarshal(body, &geminiResponse); err != nil {
+	if err := json.Unmarshal(body, &openaiResponse); err != nil {
 		return "", fmt.Errorf("failed to parse Gemini response: %w", err)
 	}
 
-	if len(geminiResponse.Candidates) == 0 || len(geminiResponse.Candidates[0].Content.Parts) == 0 {
+	if len(openaiResponse.Choices) == 0 {
 		return "", fmt.Errorf("no response content from Gemini")
 	}
 
-	return geminiResponse.Candidates[0].Content.Parts[0].Text, nil
+	return openaiResponse.Choices[0].Message.Content, nil
+}
+
+// callGroqAPI makes a call to Groq API
+func (p *CloudProvider) callGroqAPI(ctx context.Context, prompt string) (string, error) {
+	if p.config.APIKey == "" {
+		return "", fmt.Errorf("Groq API key not configured")
+	}
+
+	url := "https://api.groq.com/openai/v1/chat/completions"
+
+	requestBody := map[string]interface{}{
+		"model": p.config.Model,
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+		"temperature": p.config.Temperature,
+		"max_tokens":  1024,
+	}
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
+
+	client := &http.Client{Timeout: p.config.Timeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to call Groq API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Groq API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var openaiResponse struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal(body, &openaiResponse); err != nil {
+		return "", fmt.Errorf("failed to parse Groq response: %w", err)
+	}
+
+	if len(openaiResponse.Choices) == 0 {
+		return "", fmt.Errorf("no response content from Groq")
+	}
+
+	return openaiResponse.Choices[0].Message.Content, nil
 }
 
 // callOpenAIAPI makes a call to OpenAI API
@@ -336,6 +402,73 @@ func (p *CloudProvider) callAnthropicAPI(ctx context.Context, prompt string) (st
 	return anthropicResponse.Content[0].Text, nil
 }
 
+// callOpenRouterAPI makes a call to OpenRouter API
+func (p *CloudProvider) callOpenRouterAPI(ctx context.Context, prompt string) (string, error) {
+	if p.config.APIKey == "" {
+		return "", fmt.Errorf("OpenRouter API key not configured")
+	}
+
+	url := "https://openrouter.ai/api/v1/chat/completions"
+
+	requestBody := map[string]interface{}{
+		"model": p.config.Model,
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+		"temperature": p.config.Temperature,
+		"max_tokens":  1024,
+	}
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
+	req.Header.Set("HTTP-Referer", "https://gobot.ai")
+	req.Header.Set("X-Title", "GOBOT Trading Bot")
+
+	client := &http.Client{Timeout: p.config.Timeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to call OpenRouter API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("OpenRouter API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var openrouterResponse struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal(body, &openrouterResponse); err != nil {
+		return "", fmt.Errorf("failed to parse OpenRouter response: %w", err)
+	}
+
+	if len(openrouterResponse.Choices) == 0 {
+		return "", fmt.Errorf("no response content from OpenRouter")
+	}
+
+	return openrouterResponse.Choices[0].Message.Content, nil
+}
+
 // generateMockResponse creates a mock response for demonstration
 func (p *CloudProvider) generateMockResponse(prompt string) string {
 	if contains(prompt, "trading decision") {
@@ -364,6 +497,10 @@ func (p *CloudProvider) GetLatency() time.Duration {
 		return 1 * time.Second // Claude Haiku
 	case "gemini":
 		return 1 * time.Second // Gemini Flash is very fast
+	case "groq":
+		return 500 * time.Millisecond // Groq is extremely fast
+	case "openrouter":
+		return 2 * time.Second // OpenRouter varies
 	default:
 		return 2 * time.Second
 	}
@@ -423,6 +560,10 @@ func (p *CloudProvider) EstimateCost() float64 {
 		return 0.008 // ~$0.008 per 1K tokens for Claude Sonnet
 	case "gemini":
 		return 0.0000 // FREE for gemini-1.5-flash free tier
+	case "openrouter":
+		return 0.0000 // FREE for OpenRouter free models
+	case "groq":
+		return 0.0000 // FREE for Groq free tier
 	default:
 		return 0.0000
 	}

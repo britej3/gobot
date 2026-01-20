@@ -83,3 +83,4 @@ agents.md/
 n8n-sessions/
 chromium/
 puppeteer/
+.env

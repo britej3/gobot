@@ -162,6 +162,10 @@ func (e *BrainEngine) MakeTradingDecision(ctx context.Context, signalData interf
 	e.decisionsMade++
 	e.mu.Unlock()
 
+	// Add start time to context for latency tracking
+	startTime := time.Now()
+	ctx = context.WithValue(ctx, "start_time", startTime)
+
 	// Create decision prompt
 	prompt := e.provider.TradingDecisionPrompt(signalData)
 
@@ -184,7 +188,7 @@ func (e *BrainEngine) MakeTradingDecision(ctx context.Context, signalData interf
 		"confidence": decision.Confidence,
 		"symbol":     decision.Symbol,
 		"reasoning":  decision.Reasoning,
-		"latency_ms": time.Since(ctx.Value("start_time").(time.Time)).Milliseconds(),
+		"latency_ms": time.Since(startTime).Milliseconds(),
 	}).Info("GOBOT LFM2.5 trading decision generated")
 
 	return &decision, nil
@@ -389,11 +393,11 @@ func DefaultBrainConfig() BrainConfig {
 		InferenceMode:          "CLOUD",
 		LocalModel:             "qwen3:0.6b",             // Available model from msty
 		LocalBaseURL:           "http://localhost:11964", // msty port with LFM2.5
-		CloudAPIKey:            os.Getenv("GEMINI_API_KEY"),
-		CloudProvider:          "gemini",
+		CloudAPIKey:            os.Getenv("GROQ_API_KEY"),
+		CloudProvider:          "groq",
 		EnableRecovery:         true,
 		RecoveryInterval:       30 * time.Second,
-		DecisionTimeout:        15 * time.Second, // Gemini is fast
+		DecisionTimeout:        15 * time.Second, // Groq is fast
 		MaxConcurrentDecisions: 5,
 	}
 }

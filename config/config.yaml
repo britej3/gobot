@@ -21,17 +21,17 @@ binance:
 # TRADING PARAMETERS
 # ============================================================================
 trading:
-  initial_capital_usd: 100
-  max_position_usd: 10
-  daily_trade_limit: 30
-  weekly_loss_limit: 50
-  stop_loss_percent: 2.0
-  take_profit_percent: 4.0
+  initial_capital_usd: 26
+  max_position_usd: 13
+  daily_trade_limit: 50
+  weekly_loss_limit: 26
+  stop_loss_percent: 1.5
+  take_profit_percent: 5.0
   trailing_stop_enabled: true
-  trailing_stop_percent: 1.5
-  max_daily_drawdown: 5.0
-  kelly_fraction: 0.25
-  max_risk_per_trade: 0.02
+  trailing_stop_percent: 1.0
+  max_daily_drawdown: 13.0
+  kelly_fraction: 0.30
+  max_risk_per_trade: 0.03
 
   # Timing
   trading_interval_minutes: 60

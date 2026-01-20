@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/adshao/go-binance/v2/futures"
+	"github.com/britebrt/cognee/internal/executor"
 	"github.com/britebrt/cognee/internal/position"
 	"github.com/britebrt/cognee/pkg/brain"
 	"github.com/sirupsen/logrus"
@@ -15,12 +16,13 @@ import (
 
 // EnhancedStriker executes trading decisions with advanced features
 type EnhancedStriker struct {
-	client              *futures.Client
-	brain               *brain.BrainEngine
-	dynamicManager      *position.DynamicManager
-	trailingManager     *position.TrailingManager
-	isRunning           bool
-	highRiskMode        bool
+	client                 *futures.Client
+	brain                  *brain.BrainEngine
+	dynamicManager         *position.DynamicManager
+	trailingManager        *position.TrailingManager
+	selfOptimizingExecutor *executor.SelfOptimizingExecutor
+	isRunning              bool
+	highRiskMode           bool
 }
 
 // NewEnhancedStriker creates a new enhanced trading striker
@@ -32,12 +34,13 @@ func NewEnhancedStriker(
 	highRiskMode bool,
 ) *EnhancedStriker {
 	return &EnhancedStriker{
-		client:          client,
-		brain:           brain,
-		dynamicManager:  dynamicManager,
-		trailingManager: trailingManager,
-		isRunning:       false,
-		highRiskMode:    highRiskMode,
+		client:                 client,
+		brain:                  brain,
+		dynamicManager:         dynamicManager,
+		trailingManager:        trailingManager,
+		selfOptimizingExecutor: executor.NewSelfOptimizingExecutor(client, nil),
+		isRunning:              false,
+		highRiskMode:           highRiskMode,
 	}
 }
 
@@ -61,7 +64,7 @@ func (es *EnhancedStriker) ExecuteEnhancedTrade(
 		"entry":          entryPrice,
 		"tp":             takeProfit,
 		"sl":             stopLoss,
-	}).Info("Executing enhanced trade")
+	}).Info("🎯 Executing enhanced trade with self-optimization")
 
 	// Set leverage
 	if err := es.setLeverage(ctx, symbol, leverage); err != nil {
@@ -79,16 +82,10 @@ func (es *EnhancedStriker) ExecuteEnhancedTrade(
 		side = futures.SideTypeSell
 	}
 
-	// Create market order
-	order, err := es.client.NewCreateOrderService().
-		Symbol(symbol).
-		Side(side).
-		Type(futures.OrderTypeMarket).
-		Quantity(fmt.Sprintf("%.6f", quantity)).
-		Do(ctx)
-
+	// Use self-optimizing executor for order execution
+	order, err := es.selfOptimizingExecutor.Execute(ctx, symbol, side, quantity, entryPrice)
 	if err != nil {
-		return fmt.Errorf("failed to create order: %w", err)
+		return fmt.Errorf("self-optimizing execution failed: %w", err)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -96,7 +93,7 @@ func (es *EnhancedStriker) ExecuteEnhancedTrade(
 		"order_id":  order.OrderID,
 		"quantity":  quantity,
 		"side":      side,
-	}).Info("Order executed successfully")
+	}).Info("✅ Order executed successfully with self-optimization")
 
 	// Set take profit and stop loss
 	go es.setEnhancedRiskManagement(ctx, symbol, entryPrice, takeProfit, stopLoss, side)
@@ -370,28 +367,22 @@ func (es *EnhancedStriker) ExecuteEnhancedBuyOrder(
 	stopLoss := es.calculateStopLoss(currentPrice, volatility, "BUY")
 	takeProfit := es.calculateTakeProfit(currentPrice, volatility, "BUY")
 
-	// Place market buy order
-	order, err := es.client.NewCreateOrderService().
-		Symbol(symbol).
-		Side(futures.SideTypeBuy).
-		Type(futures.OrderTypeMarket).
-		Quantity(fmt.Sprintf("%.6f", quantity)).
-		Do(ctx)
-
+	// Use self-optimizing executor for order execution
+	order, err := es.selfOptimizingExecutor.Execute(ctx, symbol, futures.SideTypeBuy, quantity, currentPrice)
 	if err != nil {
-		logrus.WithError(err).Error("Failed to place buy order")
+		logrus.WithError(err).Error("Self-optimizing buy order execution failed")
 		return
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"symbol":     symbol,
-		"order_id":   order.OrderID,
-		"quantity":   quantity,
-		"price":      currentPrice,
-		"leverage":   leverage,
-		"stop_loss":  stopLoss,
-		"take_profit": takeProfit,
-	}).Info("⚡ Enhanced buy order executed")
+		"symbol":       symbol,
+		"order_id":     order.OrderID,
+		"quantity":     quantity,
+		"price":        currentPrice,
+		"leverage":     leverage,
+		"stop_loss":    stopLoss,
+		"take_profit":  takeProfit,
+	}).Info("⚡ Enhanced buy order executed with self-optimization")
 
 	// Set trailing stop loss and take profit
 	es.setEnhancedRiskManagement(ctx, symbol, currentPrice, stopLoss, takeProfit, futures.SideTypeBuy)
@@ -417,28 +408,22 @@ func (es *EnhancedStriker) ExecuteEnhancedSellOrder(
 	stopLoss := es.calculateStopLoss(currentPrice, volatility, "SELL")
 	takeProfit := es.calculateTakeProfit(currentPrice, volatility, "SELL")
 
-	// Place market sell order
-	order, err := es.client.NewCreateOrderService().
-		Symbol(symbol).
-		Side(futures.SideTypeSell).
-		Type(futures.OrderTypeMarket).
-		Quantity(fmt.Sprintf("%.6f", quantity)).
-		Do(ctx)
-
+	// Use self-optimizing executor for order execution
+	order, err := es.selfOptimizingExecutor.Execute(ctx, symbol, futures.SideTypeSell, quantity, currentPrice)
 	if err != nil {
-		logrus.WithError(err).Error("Failed to place sell order")
+		logrus.WithError(err).Error("Self-optimizing sell order execution failed")
 		return
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"symbol":     symbol,
-		"order_id":   order.OrderID,
-		"quantity":   quantity,
-		"price":      currentPrice,
-		"leverage":   leverage,
-		"stop_loss":  stopLoss,
-		"take_profit": takeProfit,
-	}).Info("⚡ Enhanced sell order executed")
+		"symbol":       symbol,
+		"order_id":     order.OrderID,
+		"quantity":     quantity,
+		"price":        currentPrice,
+		"leverage":     leverage,
+		"stop_loss":    stopLoss,
+		"take_profit":  takeProfit,
+	}).Info("⚡ Enhanced sell order executed with self-optimization")
 
 	// Set trailing stop loss and take profit
 	es.setEnhancedRiskManagement(ctx, symbol, currentPrice, stopLoss, takeProfit, futures.SideTypeSell)
@@ -622,8 +607,43 @@ func (es *EnhancedStriker) checkVolumeSpike(klines []*futures.Kline) bool {
 
 // extractAssetInfo extracts asset information from interface
 func (es *EnhancedStriker) extractAssetInfo(asset interface{}) (string, float64, float64) {
-	// This would use reflection or type assertion in production
-	// For now, return placeholder values
+	// Type assert to *futures.PriceChangeStats
+	if priceChangeStats, ok := asset.(*futures.PriceChangeStats); ok {
+		symbol := priceChangeStats.Symbol
+		price := parseFloat(priceChangeStats.LastPrice)
+		priceChangePercent := parseFloat(priceChangeStats.PriceChangePercent)
+		
+		// Calculate confidence based on price change
+		confidence := 0.5 + (math.Abs(priceChangePercent) / 20.0)
+		if confidence > 1.0 {
+			confidence = 1.0
+		}
+		
+		return symbol, price, confidence
+	}
+	
+	// Fallback: try to extract from map
+	if assetMap, ok := asset.(map[string]interface{}); ok {
+		symbol, _ := assetMap["symbol"].(string)
+		price := 0.0
+		confidence := 0.5
+		
+		if priceVal, ok := assetMap["price"].(float64); ok {
+			price = priceVal
+		} else if priceStr, ok := assetMap["price"].(string); ok {
+			price = parseFloat(priceStr)
+		}
+		
+		if priceChange, ok := assetMap["priceChangePercent"].(float64); ok {
+			confidence = 0.5 + (math.Abs(priceChange) / 20.0)
+			if confidence > 1.0 {
+				confidence = 1.0
+			}
+		}
+		
+		return symbol, price, confidence
+	}
+	
 	return "", 0, 0
 }
 
@@ -668,5 +688,13 @@ func (es *EnhancedStriker) Start(ctx context.Context) error {
 func (es *EnhancedStriker) Stop() error {
 	logrus.Info("🛑 Stopping enhanced striker...")
 	es.isRunning = false
+	return nil
+}
+
+// GetExecutionMetrics returns execution metrics from self-optimizing executor
+func (es *EnhancedStriker) GetExecutionMetrics() *executor.ExecutionMetrics {
+	if es.selfOptimizingExecutor != nil {
+		return es.selfOptimizingExecutor.GetMetrics()
+	}
 	return nil
 }

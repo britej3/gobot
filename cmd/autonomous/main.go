@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/britebrt/cognee/internal/position"
 	"github.com/britebrt/cognee/internal/striker"
 	"github.com/britebrt/cognee/pkg/brain"
+	"github.com/britebrt/cognee/pkg/alerting"
 	"github.com/britebrt/cognee/services/screener"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
@@ -36,6 +38,9 @@ type AutonomousBot struct {
 	adaptiveConfig     *adaptive.AdaptiveConfig
 	currentSession     adaptive.TradingSession
 	lastSessionUpdate  time.Time
+	
+	// Telegram notifications
+	telegramAlert      *alerting.TelegramAlert
 }
 
 func main() {
@@ -118,6 +123,13 @@ func main() {
 	adaptiveConfig := adaptive.NewAdaptiveConfig()
 	currentSession := adaptive.GetCurrentSession()
 
+	// Initialize Telegram notifications
+	telegramAlert := alerting.NewTelegramAlert(alerting.TelegramConfig{
+		Token:   os.Getenv("TELEGRAM_TOKEN"),
+		ChatID:  os.Getenv("TELEGRAM_CHAT_ID"),
+		Enabled: prodConfig.Monitoring.TelegramEnabled,
+	})
+
 	// Create autonomous bot
 	bot := &AutonomousBot{
 		binanceClient:         binanceClient,
@@ -132,6 +144,7 @@ func main() {
 		adaptiveConfig:        adaptiveConfig,
 		currentSession:        currentSession,
 		lastSessionUpdate:     time.Now(),
+		telegramAlert:         telegramAlert,
 	}
 
 	// Start the bot
@@ -244,11 +257,19 @@ func (ab *AutonomousBot) Start() error {
 	go ab.adaptiveOptimizationLoop()
 
 	logrus.Info("✅ Autonomous trading bot started successfully")
-	logrus.Info("📊 Trading Loop: Every 3 minutes")
+	logrus.Info("📊 Trading Loop: Every 30 seconds (scalping mode)")
 	logrus.Info("🎯 Position Sizing: Dynamic based on session & volatility & confidence")
 	logrus.Info("🛡️ Risk Management: 1.5% SL, 5% TP, 1% trailing")
 	logrus.Info("📈 Target: 15-25% monthly returns with <13 USDT drawdown")
 	logrus.Info("⏰ Adaptive Time-Based Optimization: Active (7 sessions, 3-level relaxation)")
+
+	// Send Telegram notification
+	logrus.Info("📱 Sending Telegram notification...")
+	if err := ab.telegramAlert.SendTrade("🚀 GOBOT v3.0 Started\n\n✅ Autonomous trading bot is now running\n📊 Trading Loop: Every 30 seconds (scalping mode)\n🎯 Balance: 26 USDT"); err != nil {
+		logrus.WithError(err).Error("Failed to send Telegram notification")
+	} else {
+		logrus.Info("✅ Telegram notification sent successfully")
+	}
 
 	return nil
 }
@@ -264,6 +285,9 @@ func (ab *AutonomousBot) Stop() {
 	ab.trailingManager.Stop()
 	ab.dynamicManager.Stop()
 	ab.dynamicScreener.Stop()
+
+	// Send Telegram notification
+	ab.telegramAlert.SendTrade("🛑 GOBOT v3.0 Stopped\n\n✅ Bot has been shut down gracefully\n📊 Trading session ended")
 }
 
 // adaptiveOptimizationLoop runs adaptive optimization checks
@@ -285,10 +309,10 @@ func (ab *AutonomousBot) adaptiveOptimizationLoop() {
 
 // tradingLoop runs the main autonomous trading logic
 func (ab *AutonomousBot) tradingLoop() {
-	ticker := time.NewTicker(3 * time.Minute) // Trade every 3 minutes
+	ticker := time.NewTicker(30 * time.Second) // Trade every 30 seconds (scalping mode)
 	defer ticker.Stop()
 
-	logrus.Info("🎯 Trading loop started (every 3 minutes)")
+	logrus.Info("🎯 Trading loop started (every 30 seconds)")
 
 	// Give screener time to initialize
 	time.Sleep(5 * time.Second)
@@ -391,6 +415,7 @@ func (ab *AutonomousBot) executeTradingCycle() {
 	decision, err := ab.enhancedStriker.Execute(ctx, topAssets)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to execute enhanced striker")
+		ab.telegramAlert.SendError(fmt.Sprintf("❌ Enhanced striker error: %v", err))
 		return
 	}
 
@@ -514,8 +539,18 @@ func (ab *AutonomousBot) enterPosition(ctx context.Context, target brain.TargetA
 		leverage = 15
 	}
 
+	// Send Telegram notification
+	emoji := "🟢"
+	if target.Action == "SELL" {
+		emoji = "🔴"
+	}
+	ab.telegramAlert.SendTrade(fmt.Sprintf(
+		"%s *GOBOT Trade Executed*\n\n*Symbol:* %s\n*Action:* %s\n*Confidence:* %.1f\n*Entry:* $%.6f\n*Leverage:* %dx\n*Session:* %s\n*Score:* %.1f",
+		emoji, target.Symbol, target.Action, target.ConfidenceScore, target.EntryZone, leverage, ab.currentSession.Name, target.ConfidenceScore,
+	))
+
 	// Execute trade via enhanced striker
-	ab.enhancedStriker.ExecuteEnhancedTrade(
+	err := ab.enhancedStriker.ExecuteEnhancedTrade(
 		ctx,
 		target.Symbol,
 		target.Action,
@@ -525,6 +560,25 @@ func (ab *AutonomousBot) enterPosition(ctx context.Context, target brain.TargetA
 		target.TakeProfit,
 		target.StopLoss,
 	)
+	
+	if err != nil {
+		logrus.WithError(err).Error("❌ Failed to execute enhanced trade")
+		ab.telegramAlert.SendError(fmt.Sprintf("❌ Trade execution failed for %s: %v", target.Symbol, err))
+		
+		// Check if it's a critical error
+		if contains(err.Error(), "insufficient") || contains(err.Error(), "balance") || contains(err.Error(), "margin") {
+			ab.telegramAlert.SendError(fmt.Sprintf("🚨 CRITICAL: Insufficient balance/margin for %s. Please check account.", target.Symbol))
+		}
+		if contains(err.Error(), "position side") || contains(err.Error(), "Position side") {
+			ab.telegramAlert.SendError(fmt.Sprintf("🚨 CRITICAL: Position mode mismatch for %s. Check Binance Futures position mode settings.", target.Symbol))
+		}
+		if contains(err.Error(), "precision") || contains(err.Error(), "tick") {
+			ab.telegramAlert.SendError(fmt.Sprintf("⚠️ Precision error for %s: %v. Will retry with adjusted parameters.", target.Symbol, err))
+		}
+		return
+	}
+	
+	logrus.WithField("symbol", target.Symbol).Info("✅ Enhanced trade executed successfully")
 }
 
 // closePosition closes a position
@@ -535,6 +589,7 @@ func (ab *AutonomousBot) closePosition(ctx context.Context, symbol string) {
 	positions, err := ab.binanceClient.NewGetPositionRiskService().Symbol(symbol).Do(ctx)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to get position")
+		ab.telegramAlert.SendError(fmt.Sprintf("❌ Failed to get position for %s: %v", symbol, err))
 		return
 	}
 
@@ -563,6 +618,15 @@ func (ab *AutonomousBot) closePosition(ctx context.Context, symbol string) {
 
 	if err != nil {
 		logrus.WithError(err).Error("Failed to close position")
+		ab.telegramAlert.SendError(fmt.Sprintf("❌ Failed to close position for %s: %v", symbol, err))
+		
+		// Check if it's a critical error
+		if contains(err.Error(), "insufficient") || contains(err.Error(), "balance") || contains(err.Error(), "margin") {
+			ab.telegramAlert.SendError(fmt.Sprintf("🚨 CRITICAL: Insufficient balance/margin to close %s. Please check account.", symbol))
+		}
+		if contains(err.Error(), "position side") || contains(err.Error(), "Position side") {
+			ab.telegramAlert.SendError(fmt.Sprintf("🚨 CRITICAL: Position mode mismatch for %s. Check Binance Futures position mode settings.", symbol))
+		}
 		return
 	}
 
@@ -594,6 +658,7 @@ func (ab *AutonomousBot) checkAndManagePositions() {
 	positions, err := ab.binanceClient.NewGetPositionRiskService().Do(ctx)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to get positions")
+		ab.telegramAlert.SendError(fmt.Sprintf("❌ Failed to get positions: %v", err))
 		return
 	}
 
@@ -622,4 +687,22 @@ func parseFloat(s string) (float64, error) {
 	var f float64
 	_, err := fmt.Sscanf(s, "%f", &f)
 	return f, err
+}
+
+// contains checks if a string contains a substring (case-insensitive)
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
+}
+
+// findSubstring finds a substring in a string (case-insensitive)
+func findSubstring(s, substr string) bool {
+	s = strings.ToLower(s)
+	substr = strings.ToLower(substr)
+	
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
