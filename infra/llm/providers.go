@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/britebrt/cognee/domain/llm"
+	"github.com/britej3/gobot/domain/llm"
 )
 
 type OpenAIProvider struct {

@@ -3,7 +3,7 @@ package binance
 import (
 	"context"
 
-	"github.com/britebrt/cognee/services/screener"
+	"github.com/britej3/gobot/services/screener"
 )
 
 type ScreenerAdapter struct {

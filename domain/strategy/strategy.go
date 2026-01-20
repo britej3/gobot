@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/britebrt/cognee/domain/trade"
+	"github.com/britej3/gobot/domain/trade"
 )
 
 type StrategyType string

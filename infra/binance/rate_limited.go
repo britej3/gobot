@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/britebrt/cognee/domain/trade"
-	"github.com/britebrt/cognee/pkg/retry"
+	"github.com/britej3/gobot/domain/trade"
+	"github.com/britej3/gobot/pkg/retry"
 	"golang.org/x/time/rate"
 )
 

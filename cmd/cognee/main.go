@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/britebrt/cognee/pkg/brain"
-	"github.com/britebrt/cognee/pkg/platform"
-	internalPlatform "github.com/britebrt/cognee/internal/platform"
+	"github.com/britej3/gobot/pkg/brain"
+	"github.com/britej3/gobot/pkg/platform"
+	internalPlatform "github.com/britej3/gobot/internal/platform"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 )

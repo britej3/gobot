@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/britebrt/cognee/internal/platform"
+	"github.com/britej3/gobot/internal/platform"
 )
 
 func main() {

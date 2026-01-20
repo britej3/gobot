@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/britebrt/cognee/domain/trade"
-	"github.com/britebrt/cognee/pkg/circuitbreaker"
+	"github.com/britej3/gobot/domain/trade"
+	"github.com/britej3/gobot/pkg/circuitbreaker"
 	"golang.org/x/time/rate"
 )
 

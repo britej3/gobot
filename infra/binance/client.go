@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/britebrt/cognee/domain/trade"
+	"github.com/britej3/gobot/domain/trade"
 	"github.com/google/uuid"
 	"golang.org/x/time/rate"
 )

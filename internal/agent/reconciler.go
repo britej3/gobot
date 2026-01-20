@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/adshao/go-binance/v2/futures"
-	"github.com/britebrt/cognee/internal/platform"
-	"github.com/britebrt/cognee/pkg/types"
+	"github.com/britej3/gobot/internal/platform"
+	"github.com/britej3/gobot/pkg/types"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )

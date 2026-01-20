@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/britebrt/cognee/infra/binance"
-	"github.com/britebrt/cognee/services/screener"
+	"github.com/britej3/gobot/infra/binance"
+	"github.com/britej3/gobot/services/screener"
 )
 
 func main() {

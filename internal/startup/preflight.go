@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/britebrt/cognee/internal/health"
-	"github.com/britebrt/cognee/internal/ui"
+	"github.com/britej3/gobot/internal/health"
+	"github.com/britej3/gobot/internal/ui"
 )
 
 // PreflightResult contains the result of preflight checks

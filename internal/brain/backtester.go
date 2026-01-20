@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/britebrt/cognee/internal/platform"
+	"github.com/britej3/gobot/internal/platform"
 	"github.com/sirupsen/logrus"
 )
 

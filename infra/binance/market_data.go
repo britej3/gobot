@@ -5,9 +5,9 @@ import (
 	"math"
 	"sync"
 
-	"github.com/britebrt/cognee/domain/platform"
-	"github.com/britebrt/cognee/domain/trade"
-	"github.com/britebrt/cognee/pkg/stealth"
+	"github.com/britej3/gobot/domain/platform"
+	"github.com/britej3/gobot/domain/trade"
+	"github.com/britej3/gobot/pkg/stealth"
 	"golang.org/x/time/rate"
 )
 

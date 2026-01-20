@@ -13,11 +13,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/britebrt/cognee/config"
-	"github.com/britebrt/cognee/domain/trade"
-	"github.com/britebrt/cognee/infra/binance"
-	"github.com/britebrt/cognee/pkg/alerting"
-	"github.com/britebrt/cognee/pkg/state"
+	"github.com/britej3/gobot/config"
+	"github.com/britej3/gobot/domain/trade"
+	"github.com/britej3/gobot/infra/binance"
+	"github.com/britej3/gobot/pkg/alerting"
+	"github.com/britej3/gobot/pkg/state"
 )
 
 type TradingSignal struct {

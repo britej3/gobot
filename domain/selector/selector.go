@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/britebrt/cognee/domain/asset"
-	"github.com/britebrt/cognee/domain/trade"
+	"github.com/britej3/gobot/domain/asset"
+	"github.com/britej3/gobot/domain/trade"
 )
 
 type SelectorType string

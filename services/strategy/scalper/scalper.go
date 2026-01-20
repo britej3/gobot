@@ -3,8 +3,8 @@ package scalper
 import (
 	"context"
 
-	"github.com/britebrt/cognee/domain/strategy"
-	"github.com/britebrt/cognee/domain/trade"
+	"github.com/britej3/gobot/domain/strategy"
+	"github.com/britej3/gobot/domain/trade"
 )
 
 type ScalperStrategy struct {

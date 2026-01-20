@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/adshao/go-binance/v2/futures"
-	"github.com/britebrt/cognee/pkg/brain"
-	"github.com/britebrt/cognee/pkg/feedback"
+	"github.com/britej3/gobot/pkg/brain"
+	"github.com/britej3/gobot/pkg/feedback"
 	"github.com/sirupsen/logrus"
 )
 

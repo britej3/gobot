@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/adshao/go-binance/v2/futures"
-	"github.com/britebrt/cognee/pkg/brain"
-	"github.com/britebrt/cognee/pkg/feedback"
-	"github.com/britebrt/cognee/internal/monitoring"
-	"github.com/britebrt/cognee/internal/risk"
-	"github.com/britebrt/cognee/internal/alerting"
+	"github.com/britej3/gobot/pkg/brain"
+	"github.com/britej3/gobot/pkg/feedback"
+	"github.com/britej3/gobot/internal/monitoring"
+	"github.com/britej3/gobot/internal/risk"
+	"github.com/britej3/gobot/internal/alerting"
 	"github.com/sirupsen/logrus"
 )
 

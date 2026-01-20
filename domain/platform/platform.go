@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/britebrt/cognee/domain/automation"
-	"github.com/britebrt/cognee/domain/executor"
-	"github.com/britebrt/cognee/domain/selector"
-	"github.com/britebrt/cognee/domain/strategy"
-	"github.com/britebrt/cognee/domain/trade"
+	"github.com/britej3/gobot/domain/automation"
+	"github.com/britej3/gobot/domain/executor"
+	"github.com/britej3/gobot/domain/selector"
+	"github.com/britej3/gobot/domain/strategy"
+	"github.com/britej3/gobot/domain/trade"
 )
 
 type Platform struct {

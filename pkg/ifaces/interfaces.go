@@ -2,7 +2,7 @@ package ifaces
 
 import (
 	"context"
-	"github.com/britebrt/cognee/domain/asset"
+	"github.com/britej3/gobot/domain/asset"
 )
 
 type Scanner interface {

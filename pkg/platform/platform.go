@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/adshao/go-binance/v2/futures"
-	"github.com/britebrt/cognee/internal/agent"
-	"github.com/britebrt/cognee/internal/platform"
-	"github.com/britebrt/cognee/internal/position"
-	"github.com/britebrt/cognee/pkg/brain"
-	"github.com/britebrt/cognee/services/screener"
+	"github.com/britej3/gobot/internal/agent"
+	"github.com/britej3/gobot/internal/platform"
+	"github.com/britej3/gobot/internal/position"
+	"github.com/britej3/gobot/pkg/brain"
+	"github.com/britej3/gobot/services/screener"
 	"github.com/sirupsen/logrus"
 )
 

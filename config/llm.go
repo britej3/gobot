@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/britebrt/cognee/domain/llm"
+	"github.com/britej3/gobot/domain/llm"
 )
 
 type LLMConfig struct {

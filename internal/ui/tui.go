@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/britebrt/cognee/internal/health"
+	"github.com/britej3/gobot/internal/health"
 )
 
 // ============================================================================

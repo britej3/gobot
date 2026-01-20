@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/britebrt/cognee/domain/trade"
+	"github.com/britej3/gobot/domain/trade"
 )
 
 type Config struct {

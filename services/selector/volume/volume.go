@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/britebrt/cognee/domain/asset"
-	"github.com/britebrt/cognee/domain/selector"
-	"github.com/britebrt/cognee/domain/trade"
+	"github.com/britej3/gobot/domain/asset"
+	"github.com/britej3/gobot/domain/selector"
+	"github.com/britej3/gobot/domain/trade"
 )
 
 type VolumeSelector struct {

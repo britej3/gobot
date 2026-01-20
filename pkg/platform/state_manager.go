@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/britebrt/cognee/pkg/types"
+	"github.com/britej3/gobot/pkg/types"
 	"github.com/sirupsen/logrus"
 )
 

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/britebrt/cognee/domain/asset"
+	"github.com/britej3/gobot/domain/asset"
 )
 
 type Config struct {
